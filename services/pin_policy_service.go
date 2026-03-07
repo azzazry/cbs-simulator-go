@@ -70,7 +70,8 @@ func IsAccountLocked(cif string) (bool, error) {
 	maxAttempts := config.AppConfig.MaxLoginAttempts
 	lockoutMinutes := config.AppConfig.LockoutDurationMinutes
 
-	windowStart := time.Now().Add(-time.Duration(lockoutMinutes) * time.Minute)
+	// Use UTC to match SQLite's CURRENT_TIMESTAMP format
+	windowStart := time.Now().UTC().Add(-time.Duration(lockoutMinutes) * time.Minute).Format("2006-01-02 15:04:05")
 
 	// Count failed attempts in the lockout window since last success
 	query := `SELECT COUNT(*) FROM login_attempts 
@@ -91,7 +92,8 @@ func IsAccountLocked(cif string) (bool, error) {
 // GetFailedAttemptCount returns the number of recent failed login attempts
 func GetFailedAttemptCount(cif string) (int, error) {
 	lockoutMinutes := config.AppConfig.LockoutDurationMinutes
-	windowStart := time.Now().Add(-time.Duration(lockoutMinutes) * time.Minute)
+	// Use UTC to match SQLite's CURRENT_TIMESTAMP format
+	windowStart := time.Now().UTC().Add(-time.Duration(lockoutMinutes) * time.Minute).Format("2006-01-02 15:04:05")
 
 	query := `SELECT COUNT(*) FROM login_attempts 
 	          WHERE cif = ? AND is_success = 0 AND attempted_at > ?

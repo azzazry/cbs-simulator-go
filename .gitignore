@@ -69,5 +69,6 @@ temp/
 *.md
 !API.md
 !API_SECURITY.md
+!TESTING.md
 !BANKING_FEES.md
 !README.md
