@@ -90,9 +90,31 @@ func ProcessIntraBankTransfer(req TransferRequest) (*models.Transaction, error) 
 	// Simulate processing delay
 	utils.SimulateDelay(500)
 
-	// Retrieve and return transaction
+	// Retrieve transaction
 	trxID, _ := result.LastInsertId()
-	return GetTransactionByID(int(trxID))
+	transaction, _ := GetTransactionByID(int(trxID))
+
+	// Trigger notifications for sender and receiver
+	fromCIF, _ := GetCIFByAccountNumber(req.FromAccountNumber)
+	toCIF, _ := GetCIFByAccountNumber(req.ToAccountNumber)
+
+	if fromCIF != "" {
+		SaveNotification(fromCIF, "transfer", "Transfer Berhasil",
+			fmt.Sprintf("Anda mengirim Rp %.0f ke %s", req.Amount, req.ToAccountNumber),
+			transactionID)
+		SendPushNotification(fromCIF, "Transfer Berhasil",
+			fmt.Sprintf("Rp %.0f telah ditransfer ke %s", req.Amount, req.ToAccountNumber))
+	}
+
+	if toCIF != "" {
+		SaveNotification(toCIF, "transfer", "Uang Masuk",
+			fmt.Sprintf("Anda menerima Rp %.0f dari %s", req.Amount, req.FromAccountNumber),
+			transactionID)
+		SendPushNotification(toCIF, "Uang Masuk",
+			fmt.Sprintf("Rp %.0f diterima dari %s", req.Amount, req.FromAccountNumber))
+	}
+
+	return transaction, nil
 }
 
 // ProcessInterBankTransfer processes interbank transfer (to other banks)
@@ -169,9 +191,21 @@ func ProcessInterBankTransfer(req TransferRequest) (*models.Transaction, error) 
 	// Simulate processing delay (longer for interbank)
 	utils.SimulateDelay(1000)
 
-	// Retrieve and return transaction
+	// Retrieve transaction
 	trxID, _ := result.LastInsertId()
-	return GetTransactionByID(int(trxID))
+	transaction, _ := GetTransactionByID(int(trxID))
+
+	// Trigger notification for sender
+	fromCIF, _ := GetCIFByAccountNumber(req.FromAccountNumber)
+	if fromCIF != "" {
+		SaveNotification(fromCIF, "transfer", "Transfer Antar Bank Berhasil",
+			fmt.Sprintf("Rp %.0f + biaya Rp %.0f ditransfer. Settlement: %s", req.Amount, fee, "1-2 hari kerja"),
+			transactionID)
+		SendPushNotification(fromCIF, "Transfer Antar Bank Berhasil",
+			fmt.Sprintf("Rp %.0f telah diproses", req.Amount))
+	}
+
+	return transaction, nil
 }
 
 // GetTransactionByID retrieves transaction by ID
@@ -220,4 +254,14 @@ func GetTransactionByTransactionID(transactionID string) (*models.Transaction, e
 	}
 
 	return &trx, nil
+}
+
+// GetCIFByAccountNumber retrieves CIF from account number
+func GetCIFByAccountNumber(accountNumber string) (string, error) {
+	var cif string
+	err := database.DB.QueryRow(`SELECT cif FROM accounts WHERE account_number = ?`, accountNumber).Scan(&cif)
+	if err != nil {
+		return "", err
+	}
+	return cif, nil
 }

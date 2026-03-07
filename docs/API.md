@@ -531,6 +531,142 @@ Check if server is running.
 
 ---
 
+## Notifications
+
+### Get Notification History
+Get notification history with pagination.
+
+**Endpoint:** `GET /notifications/:cif?limit=20&offset=0`
+
+**Query Parameters:**
+- `limit` (optional): Number of records (default: 20)
+- `offset` (optional): Pagination offset (default: 0)
+
+**Success Response:**
+```json
+{
+  "status": "success",
+  "data": [
+    {
+      "id": 1,
+      "cif": "CIF001",
+      "notification_type": "transfer",
+      "title": "Transfer Berhasil",
+      "message": "Anda mengirim Rp 100.000 ke 1001234568",
+      "transaction_id": "TRX20260307001",
+      "is_read": 0,
+      "created_at": "2026-03-07T10:30:00Z"
+    }
+  ]
+}
+```
+
+### Get Unread Notification Count
+Get count of unread notifications.
+
+**Endpoint:** `GET /notifications/:cif/count`
+
+**Success Response:**
+```json
+{
+  "status": "success",
+  "data": {
+    "unread_count": 5
+  }
+}
+```
+
+### Mark Notification as Read
+Mark a notification as read.
+
+**Endpoint:** `POST /notifications/read`
+
+**Request Body:**
+```json
+{
+  "notification_id": 1
+}
+```
+
+**Success Response:**
+```json
+{
+  "status": "success",
+  "message": "Notification marked as read"
+}
+```
+
+### Register FCM Token
+Register device FCM token for push notifications.
+
+**Endpoint:** `POST /notifications/fcm-token`
+
+**Request Body:**
+```json
+{
+  "cif": "CIF001",
+  "device_token": "exxxxxxxxxxxxxxxxxxxxxxxxx",
+  "device_type": "android",
+  "device_name": "Samsung Galaxy A12"
+}
+```
+
+**Success Response:**
+```json
+{
+  "status": "success",
+  "message": "FCM token registered successfully"
+}
+```
+
+### Get Notification Preferences
+Get user notification settings.
+
+**Endpoint:** `GET /notifications/:cif/preferences`
+
+**Success Response:**
+```json
+{
+  "status": "success",
+  "data": {
+    "id": 1,
+    "cif": "CIF001",
+    "transfer_notification": 1,
+    "payment_notification": 1,
+    "deposit_notification": 1,
+    "loan_notification": 1,
+    "promotion_notification": 1,
+    "updated_at": "2026-03-07T10:00:00Z"
+  }
+}
+```
+
+### Update Notification Preferences
+Update user notification settings.
+
+**Endpoint:** `PUT /notifications/:cif/preferences`
+
+**Request Body:**
+```json
+{
+  "transfer_notification": 1,
+  "payment_notification": 1,
+  "deposit_notification": 0,
+  "loan_notification": 1,
+  "promotion_notification": 0
+}
+```
+
+**Success Response:**
+```json
+{
+  "status": "success",
+  "message": "Notification preferences updated successfully"
+}
+```
+
+---
+
 ## Error Codes
 
 | HTTP Status | Description |

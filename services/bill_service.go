@@ -156,9 +156,21 @@ func PayBill(accountNumber, billNumber string) (*models.Transaction, error) {
 	// Simulate processing delay
 	utils.SimulateDelay(800)
 	
-	// Retrieve and return transaction
+	// Retrieve transaction
 	trxID, _ := result.LastInsertId()
-	return GetTransactionByID(int(trxID))
+	transaction, _ := GetTransactionByID(int(trxID))
+
+	// Trigger notification
+	cif, _ := GetCIFByAccountNumber(accountNumber)
+	if cif != "" {
+		SaveNotification(cif, "payment", "Pembayaran Berhasil",
+			fmt.Sprintf("Anda telah membayar %s sebesar Rp %.0f", bill.BillerName, bill.TotalAmount),
+			transactionID)
+		SendPushNotification(cif, "Pembayaran Berhasil",
+			fmt.Sprintf("%s: Rp %.0f", bill.BillerName, bill.TotalAmount))
+	}
+
+	return transaction, nil
 }
 
 // GetBillerList returns list of available billers

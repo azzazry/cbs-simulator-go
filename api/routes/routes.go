@@ -1,9 +1,10 @@
 package routes
 
 import (
-	"github.com/gin-gonic/gin"
 	"cbs-simulator/api/handlers"
 	"cbs-simulator/api/middleware"
+
+	"github.com/gin-gonic/gin"
 )
 
 // SetupRoutes configures all API routes
@@ -84,6 +85,17 @@ func SetupRoutes(router *gin.Engine) {
 		deposits := v1.Group("/deposits")
 		{
 			deposits.GET("/:deposit_number", handlers.GetDepositDetails)
+		}
+		
+		// Notification routes
+		notifications := v1.Group("/notifications")
+		{
+			notifications.GET("/:cif", handlers.GetNotifications)
+			notifications.GET("/:cif/count", handlers.GetNotificationCount)
+			notifications.POST("/read", handlers.MarkNotificationAsRead)
+			notifications.POST("/fcm-token", handlers.RegisterFCMToken)
+			notifications.GET("/:cif/preferences", handlers.GetNotificationPreferences)
+			notifications.PUT("/:cif/preferences", handlers.UpdateNotificationPreferences)
 		}
 	}
 }
