@@ -7,6 +7,7 @@ import (
 	"cbs-simulator/api/routes"
 	"cbs-simulator/config"
 	"cbs-simulator/database"
+	"cbs-simulator/utils"
 
 	"github.com/gin-gonic/gin"
 )
@@ -15,6 +16,10 @@ func main() {
 	// Load configuration
 	log.Println("Loading configuration...")
 	config.LoadConfig()
+
+	// Initialize logger
+	log.Println("Initializing logger...")
+	utils.InitLogger()
 
 	// Initialize database
 	log.Println("Initializing database...")

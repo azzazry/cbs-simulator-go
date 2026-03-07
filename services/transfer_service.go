@@ -10,11 +10,12 @@ import (
 
 // TransferRequest represents a fund transfer request
 type TransferRequest struct {
-	FromAccountNumber string  `json:"from_account_number"`
-	ToAccountNumber   string  `json:"to_account_number"`
-	Amount            float64 `json:"amount"`
-	Description       string  `json:"description"`
-	TransferType      string  `json:"transfer_type"` // intra, inter, rtgs, skn
+	FromAccountNumber   string  `json:"from_account_number"`
+	ToAccountNumber     string  `json:"to_account_number"`
+	Amount              float64 `json:"amount"`
+	Description         string  `json:"description"`
+	TransferType        string  `json:"transfer_type"` // intra, inter, rtgs, skn
+	DestinationBankCode string  `json:"destination_bank_code"`  // For interbank transfers (required for inter)
 }
 
 // ProcessIntraBankTransfer processes intrabank transfer (within same bank)
@@ -118,6 +119,8 @@ func ProcessIntraBankTransfer(req TransferRequest) (*models.Transaction, error) 
 }
 
 // ProcessInterBankTransfer processes interbank transfer (to other banks)
+// This is an OUTBOUND transfer from our bank to another bank
+// Fee is charged to the customer sending money OUT
 func ProcessInterBankTransfer(req TransferRequest) (*models.Transaction, error) {
 	// Validate source account
 	fromAccount, err := GetAccountBalance(req.FromAccountNumber)
@@ -129,22 +132,23 @@ func ProcessInterBankTransfer(req TransferRequest) (*models.Transaction, error) 
 		return nil, fmt.Errorf("source account is not active")
 	}
 
-	// Fee for interbank transfer
-	var fee float64
-	switch req.TransferType {
-	case "rtgs":
-		fee = 25000.00 // RTGS fee
-	case "skn":
-		fee = 3500.00 // SKN fee
-	default:
-		fee = 6500.00 // Default interbank fee
+	// Destination bank code must be provided for interbank transfers
+	if req.DestinationBankCode == "" {
+		return nil, fmt.Errorf("destination_bank_code is required for interbank transfers")
+	}
+
+	destinationBankCode := req.DestinationBankCode
+	fee, err := CalculateTransferFee(destinationBankCode, req.Amount)
+	if err != nil {
+		// Fall back to default fee if calculation fails
+		fee = 5000.00
 	}
 
 	totalAmount := req.Amount + fee
 
 	// Check balance
 	if fromAccount.AvailBalance < totalAmount {
-		return nil, fmt.Errorf("insufficient balance (including fee)")
+		return nil, fmt.Errorf("insufficient balance (transfer: %.0f + fee: %.0f = %.0f)", req.Amount, fee, totalAmount)
 	}
 
 	// Start transaction
@@ -166,11 +170,6 @@ func ProcessInterBankTransfer(req TransferRequest) (*models.Transaction, error) 
 	transactionID := utils.GenerateTransactionID()
 	referenceNumber := utils.GenerateReferenceNumber()
 	settlementDate := utils.GetCurrentDate()
-
-	// For interbank, settlement may be next day
-	if req.TransferType == "skn" {
-		settlementDate, _ = utils.AddMonths(settlementDate, 0)
-	}
 
 	result, err := tx.Exec(`INSERT INTO transactions (transaction_id, transaction_type, 
 	                        from_account_number, to_account_number, amount, currency, 

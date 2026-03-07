@@ -262,7 +262,7 @@ Transfer within the same bank (no fee).
 - 400: Account not active
 
 ### Interbank Transfer
-Transfer to other bank (with fee).
+Transfer to other bank (with dynamic fee based on destination bank configuration).
 
 **Endpoint:** `POST /transfers/inter`
 
@@ -271,18 +271,79 @@ Transfer to other bank (with fee).
 {
   "from_account_number": "1001234567",
   "to_account_number": "1234567890",
+  "destination_bank_code": "BCA",
   "amount": 500000.00,
-  "description": "Transfer ke Bank Lain",
-  "transfer_type": "skn"
+  "description": "Transfer ke Bank Lain"
 }
 ```
 
-**Transfer Types:**
-- `inter`: Regular interbank (fee: Rp 6,500)
-- `skn`: SKN - Sistem Kliring Nasional (fee: Rp 3,500)
-- `rtgs`: RTGS - Real Time Gross Settlement (fee: Rp 25,000)
+**Fee Structure (Dynamic - Configurable via Admin Panel):**
+- **Default:** Rp 5,000 per transfer (domestic)
+- **International:** Rp 10,000 per transfer
+- **Fee Type:** Flat amount (can be changed to percentage)
+- **Application:** Real-time calculation before deduction
+- **Management:** Use `/api/v1/admin/fees/transfer/calculate` to check fee for any amount
 
-**Success Response:** Same format as intrabank transfer, with fee applied.
+**Example with Fee Calculation:**
+
+Request:
+```bash
+POST /api/v1/admin/fees/transfer/calculate
+Content-Type: application/json
+
+{
+  "destination_bank_code": "BCA",
+  "amount": 500000
+}
+```
+
+Response:
+```json
+{
+  "status": "success",
+  "data": {
+    "destination_bank_code": "BCA",
+    "destination_bank_name": "Bank BCA",
+    "transfer_amount": 500000,
+    "fee": 5000,
+    "total_amount": 505000
+  }
+}
+```
+
+**Transfer Response (with fee deducted):**
+```json
+{
+  "status": "success",
+  "data": {
+    "id": 1,
+    "transaction_id": "TRX20260307XYZ",
+    "transaction_type": "transfer_inter",
+    "from_account_number": "1001234567",
+    "to_account_number": "1234567890",
+    "amount": 500000.00,
+    "currency": "IDR",
+    "description": "Transfer ke Bank Lain",
+    "reference_number": "REF20260307001",
+    "status": "success",
+    "transaction_date": "2026-03-07T10:30:00Z",
+    "settlement_date": "2026-03-07",
+    "fee": 5000.00,
+    "created_at": "2026-03-07T10:30:00Z"
+  }
+}
+```
+
+**Supported Banks:**
+- MANDIRI, BCA, BRI, CIMB, DANAMON, OCBC, MEGA, PERMATA
+- UOB, COMMONWEALTH, PANIN, MAYBANK, BTN, SUMITOMO, DBS
+- CITIBANK, HSBC, MIZUHO, JPMORGAN
+
+**Possible Errors:**
+- 400: Insufficient balance (including fee)
+- 404: Account not found
+- 400: Account not active
+- 400: Invalid bank code
 
 ### Get Transaction Details
 Get specific transaction information.
@@ -722,6 +783,233 @@ curl -X POST http://localhost:8080/api/v1/bills/pay \
     "bill_number": "BILL202603001"
   }'
 ```
+
+---
+
+## Admin Management APIs
+
+### Get All Supported Banks
+Get list of all supported banks for transfers.
+
+**Endpoint:** `GET /admin/banks`
+
+**Response:**
+```json
+{
+  "status": "success",
+  "data": [
+    {
+      "id": 1,
+      "bank_code": "MANDIRI",
+      "bank_name": "Bank Mandiri",
+      "swift_code": "BMRIIDJA",
+      "is_active": 1,
+      "created_at": "2026-03-07T00:00:00Z",
+      "updated_at": "2026-03-07T00:00:00Z"
+    },
+    {
+      "id": 2,
+      "bank_code": "BCA",
+      "bank_name": "Bank BCA",
+      "swift_code": "BCAIDJA",
+      "is_active": 1,
+      "created_at": "2026-03-07T00:00:00Z",
+      "updated_at": "2026-03-07T00:00:00Z"
+    }
+  ]
+}
+```
+
+### Transfer Fee Management
+
+#### Get All Transfer Fees
+**Endpoint:** `GET /admin/fees/transfer`
+
+Returns all configured transfer fees between bank pairs with current fee amounts.
+
+#### Update Transfer Fee
+Change fee for transfers between specific banks.
+
+**Endpoint:** `PUT /admin/fees/transfer`
+
+**Request:**
+```json
+{
+  "from_bank_code": "MANDIRI",
+  "to_bank_code": "BCA",
+  "fee_amount": 7500,
+  "fee_type": "flat"
+}
+```
+
+**Response:**
+```json
+{
+  "status": "success",
+  "message": "Transfer fee updated successfully",
+  "data": {
+    "from_bank_code": "MANDIRI",
+    "to_bank_code": "BCA",
+    "fee_amount": 7500,
+    "fee_type": "flat"
+  }
+}
+```
+
+#### Calculate Transfer Fee
+Calculate the fee for a specific transfer amount between two banks.
+
+**Endpoint:** `POST /admin/fees/transfer/calculate`
+
+**Request:**
+```json
+{
+  "from_bank_code": "MANDIRI",
+  "to_bank_code": "BCA",
+  "amount": 1000000
+}
+```
+
+**Response:**
+```json
+{
+  "status": "success",
+  "data": {
+    "from_bank_code": "MANDIRI",
+    "to_bank_code": "BCA",
+    "transfer_amount": 1000000,
+    "fee": 5000,
+    "total_amount": 1005000
+  }
+}
+```
+
+### Service Fee Management
+
+#### Get All Service Fees
+Get fees for all services (e-wallet, e-money, VA, QRIS, etc).
+
+**Endpoint:** `GET /admin/fees/services?type=topup_ewallet`
+
+Optional query parameter `type` to filter by service type:
+- `topup_ewallet` - E-wallet top-ups (OVO, DANA, GoPay)
+- `topup_emoney` - E-money top-ups (LinkAja, Mandiri e-Money)
+- `payment_va` - Virtual Account payments
+- `qris_payment` - QRIS payments
+
+#### Update Service Fee
+Change fee configuration for a service.
+
+**Endpoint:** `PUT /admin/fees/services`
+
+**Request (Flat Fee):**
+```json
+{
+  "service_code": "TOPUP_OVO",
+  "fee_amount": 3000,
+  "fee_percentage": 0,
+  "fee_type": "flat"
+}
+```
+
+**Request (Percentage Fee):**
+```json
+{
+  "service_code": "QRIS_PAYMENT",
+  "fee_amount": 0,
+  "fee_percentage": 1.5,
+  "fee_type": "percentage"
+}
+```
+
+**Response:**
+```json
+{
+  "status": "success",
+  "message": "Service fee updated successfully",
+  "data": {
+    "service_code": "TOPUP_OVO",
+    "fee_amount": 3000,
+    "fee_percentage": 0,
+    "fee_type": "flat"
+  }
+}
+```
+
+#### Calculate Service Fee
+Calculate fee for a service transaction.
+
+**Endpoint:** `POST /admin/fees/services/calculate`
+
+**Request:**
+```json
+{
+  "service_code": "TOPUP_OVO",
+  "amount": 100000
+}
+```
+
+**Response:**
+```json
+{
+  "status": "success",
+  "data": {
+    "service_code": "TOPUP_OVO",
+    "service_amount": 100000,
+    "fee": 2500,
+    "total_amount": 102500
+  }
+}
+```
+
+#### Get Fee Statistics
+View fee configuration statistics.
+
+**Endpoint:** `GET /admin/fees/statistics?type=transfer`
+
+Query parameters:
+- `type` - `transfer` or `service` (default: transfer)
+- `service_type` - Optional filter for service fees by type
+
+**Response:**
+```json
+{
+  "status": "success",
+  "data": {
+    "total_transfer_routes": 21,
+    "transfers": [...]
+  }
+}
+```
+
+---
+
+## Service Codes Reference
+
+### E-Wallet Services
+| Code | Name | Fee |
+|------|------|-----|
+| TOPUP_OVO | OVO Top-Up | Rp 2,500 |
+| TOPUP_DANA | DANA Top-Up | Rp 2,500 |
+| TOPUP_GOPAY | GoPay Top-Up | Rp 2,500 |
+
+### E-Money Services
+| Code | Name | Fee |
+|------|------|-----|
+| TOPUP_LINKAJA | LinkAja Top-Up | Rp 2,500 |
+| TOPUP_MANDIRIEMONEY | Mandiri e-Money Top-Up | Rp 2,500 |
+
+### Virtual Account Services
+| Code | Name | Fee |
+|------|------|-----|
+| PAYMENT_VA_MANDIRI | Mandiri VA Payment | Free |
+| PAYMENT_VA_BCA | BCA VA Payment | Free |
+| PAYMENT_VA_BRI | BRI VA Payment | Free |
+
+### Digital Payment Services
+| Code | Name | Fee |
+|------|------|-----|
+| QRIS_PAYMENT | QRIS Payment | 1% |
 
 ---
 

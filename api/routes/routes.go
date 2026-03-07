@@ -98,4 +98,31 @@ func SetupRoutes(router *gin.Engine) {
 			notifications.PUT("/:cif/preferences", handlers.UpdateNotificationPreferences)
 		}
 	}
+	
+	// Admin routes (unprotected for testing; add auth middleware in production)
+	admin := router.Group("/api/v1/admin")
+	{
+		// Bank management routes
+		banks := admin.Group("/banks")
+		{
+			banks.GET("", handlers.GetAllBanks)
+		}
+		
+		// Fee management routes
+		fees := admin.Group("/fees")
+		{
+			// Transfer fees
+			fees.GET("/transfer", handlers.GetTransferFees)
+			fees.PUT("/transfer", handlers.UpdateTransferFee)
+			fees.POST("/transfer/calculate", handlers.CalculateTransferFeeHandler)
+			
+			// Service fees (e-wallet, e-money, VA, QRIS, etc)
+			fees.GET("/services", handlers.GetServiceFees)
+			fees.PUT("/services", handlers.UpdateServiceFee)
+			fees.POST("/services/calculate", handlers.CalculateServiceFeeHandler)
+			
+			// Statistics
+			fees.GET("/statistics", handlers.GetFeeStatistics)
+		}
+	}
 }

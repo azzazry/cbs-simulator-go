@@ -1,7 +1,7 @@
 package middleware
 
 import (
-	"log"
+	"cbs-simulator/utils"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -24,7 +24,7 @@ func CORS() gin.HandlerFunc {
 	}
 }
 
-// Logger middleware logs all requests
+// Logger middleware logs all requests using structured logger
 func Logger() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		startTime := time.Now()
@@ -33,16 +33,18 @@ func Logger() gin.HandlerFunc {
 		c.Next()
 
 		// Log after request
-		endTime := time.Now()
-		latency := endTime.Sub(startTime)
+		latency := time.Since(startTime)
 		
-		log.Printf("[%s] %s %s | Status: %d | Latency: %v",
-			c.Request.Method,
-			c.Request.URL.Path,
-			c.ClientIP(),
-			c.Writer.Status(),
-			latency,
-		)
+		// Use structured logger if available
+		if utils.AppLogger != nil {
+			utils.AppLogger.LogAPI(
+				c.Request.Method,
+				c.Request.URL.Path,
+				c.ClientIP(),
+				c.Writer.Status(),
+				latency,
+			)
+		}
 	}
 }
 

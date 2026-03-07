@@ -165,3 +165,55 @@ type NotificationPreference struct {
 	PromotionNotification int       `json:"promotion_notification" db:"promotion_notification"`
 	UpdatedAt             time.Time `json:"updated_at" db:"updated_at"`
 }
+
+// Bank represents supported banks for transfers
+type Bank struct {
+	ID        int       `json:"id" db:"id"`
+	BankCode  string    `json:"bank_code" db:"bank_code"`
+	BankName  string    `json:"bank_name" db:"bank_name"`
+	SwiftCode string    `json:"swift_code" db:"swift_code"`
+	IsActive  int       `json:"is_active" db:"is_active"`
+	CreatedAt time.Time `json:"created_at" db:"created_at"`
+	UpdatedAt time.Time `json:"updated_at" db:"updated_at"`
+}
+
+// TransferFee represents dynamic fees for interbank transfers (OUTBOUND to other banks)
+// This system represents ONE specific bank. Customers transfer money OUT to destination banks.
+// Intrabank (within our bank) transfers are FREE.
+// Incoming transfers from other banks are FREE (received by our customers).
+type TransferFee struct {
+	ID                  int        `json:"id" db:"id"`
+	DestinationBankCode string     `json:"destination_bank_code" db:"destination_bank_code"` // Target bank code
+	DestinationBankName string     `json:"destination_bank_name" db:"destination_bank_name"` // Target bank name
+	FeeType             string     `json:"fee_type" db:"fee_type"`                           // flat or percentage
+	FeeAmount           float64    `json:"fee_amount" db:"fee_amount"`
+	FeePercentage       float64    `json:"fee_percentage" db:"fee_percentage"`
+	MinimumAmount       float64    `json:"minimum_amount" db:"minimum_amount"`
+	MaximumAmount       float64    `json:"maximum_amount" db:"maximum_amount"`
+	Description         string     `json:"description" db:"description"`
+	IsActive            int        `json:"is_active" db:"is_active"`
+	EffectiveFrom       time.Time  `json:"effective_from" db:"effective_from"`
+	EffectiveTo         *time.Time `json:"effective_to" db:"effective_to"`
+	Notes               string     `json:"notes" db:"notes"`
+	CreatedAt           time.Time  `json:"created_at" db:"created_at"`
+	UpdatedAt           time.Time  `json:"updated_at" db:"updated_at"`
+}
+
+// ServiceFee represents fees for other services (e-wallet, e-money, VA, QRIS, etc)
+type ServiceFee struct {
+	ID            int        `json:"id" db:"id"`
+	ServiceCode   string     `json:"service_code" db:"service_code"` // TOPUP_OVO, TOPUP_DANA, etc
+	ServiceName   string     `json:"service_name" db:"service_name"`
+	ServiceType   string     `json:"service_type" db:"service_type"` // topup_ewallet, topup_emoney, payment_va, qris_payment
+	FeeType       string     `json:"fee_type" db:"fee_type"`         // flat, percentage
+	FeeAmount     float64    `json:"fee_amount" db:"fee_amount"`
+	FeePercentage float64    `json:"fee_percentage" db:"fee_percentage"`
+	MinimumAmount float64    `json:"minimum_amount" db:"minimum_amount"`
+	MaximumAmount float64    `json:"maximum_amount" db:"maximum_amount"`
+	IsActive      int        `json:"is_active" db:"is_active"`
+	EffectiveFrom time.Time  `json:"effective_from" db:"effective_from"`
+	EffectiveTo   *time.Time `json:"effective_to" db:"effective_to"`
+	Notes         string     `json:"notes" db:"notes"`
+	CreatedAt     time.Time  `json:"created_at" db:"created_at"`
+	UpdatedAt     time.Time  `json:"updated_at" db:"updated_at"`
+}
