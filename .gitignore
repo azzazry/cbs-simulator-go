@@ -1,0 +1,71 @@
+# Environment Configuration
+.env
+.env.local
+.env.*.local
+
+# Go Binary
+cbs-simulator
+*.exe
+*.exe~
+*.dll
+*.so
+*.so.*
+*.dylib
+
+# Test Binary
+*.test
+
+# Output of Coverage
+*.out
+*.cover
+
+# Dependency directories
+vendor/
+
+# Go workspace file
+go.work
+
+# IDEs & Editors
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+*.sublime-project
+*.sublime-workspace
+
+# OS
+.DS_Store
+Thumbs.db
+.env.swp
+
+# Database
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+
+# Logs
+*.log
+logs/
+
+# Build artifacts
+build/
+dist/
+bin/
+
+# IDE
+.vscode/
+.idea/
+*.iml
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Markdowns Hide
+*.md
+!API.md
+!README.md
