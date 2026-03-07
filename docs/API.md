@@ -1106,4 +1106,216 @@ Import this JSON to Postman for quick testing:
 
 - [API_SECURITY.md](API_SECURITY.md) — Security endpoints (JWT, OTP, e-KYC, RBAC, audit)
 
-**Last Updated:** March 2026 (Phase 1 Security Update)
+---
+
+## Phase 2: Core Banking Endpoints
+
+### General Ledger
+
+#### Daftar Chart of Accounts
+**Endpoint:** `GET /gl/chart-of-accounts?type=asset`
+
+```bash
+curl http://localhost:8080/api/v1/gl/chart-of-accounts -H "Authorization: Bearer $TOKEN"
+```
+
+**Response:**
+```json
+{
+  "status": "success",
+  "data": [
+    {"account_code": "111", "account_name": "Kas", "account_type": "asset", "normal_balance": "debit"}
+  ]
+}
+```
+
+#### Journal Entries
+**Endpoint:** `GET /gl/journal-entries?date_from=2026-01-01&date_to=2026-12-31&page=1`
+
+#### Detail Jurnal
+**Endpoint:** `GET /gl/journal-entries/:id`
+
+#### Trial Balance (Neraca Saldo)
+**Endpoint:** `GET /gl/trial-balance?date=2026-03-07`
+
+```bash
+curl http://localhost:8080/api/v1/gl/trial-balance -H "Authorization: Bearer $TOKEN"
+```
+
+**Response:**
+```json
+{
+  "status": "success",
+  "data": {
+    "accounts": [
+      {"account_code": "111", "account_name": "Kas", "debit_balance": 1000000, "credit_balance": 0}
+    ],
+    "total_debit": 1000000,
+    "total_credit": 1000000,
+    "is_balanced": true
+  }
+}
+```
+
+#### Saldo Akun GL
+**Endpoint:** `GET /gl/account-balance/:code`
+
+---
+
+### CIF Enhancement
+
+#### Single Customer View
+**Endpoint:** `GET /customers/:cif/overview`
+
+```bash
+curl http://localhost:8080/api/v1/customers/CIF001/overview -H "Authorization: Bearer $TOKEN"
+```
+
+**Response:** Data lengkap nasabah termasuk accounts, loans, deposits, cards, roles, dan data tambahan.
+
+#### Update Data Tambahan Nasabah
+**Endpoint:** `PUT /customers/:cif/extended`
+
+```bash
+curl -X PUT http://localhost:8080/api/v1/customers/CIF001/extended \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"mother_maiden_name":"Sari Dewi","nationality":"WNI","occupation":"Engineer","monthly_income":25000000,"npwp":"12.345.678.9-012.000"}'
+```
+
+#### Cari Nasabah
+**Endpoint:** `GET /customers/search?q=Budi`
+
+---
+
+### Bunga & Simulasi
+
+#### Daftar Suku Bunga
+**Endpoint:** `GET /interest/rates?product_type=savings`
+
+**Response:**
+```json
+{
+  "status": "success",
+  "data": [
+    {"product_type": "savings", "product_name": "Tabungan Reguler", "base_rate": 1.00, "min_balance": 0, "max_balance": 100000000},
+    {"product_type": "savings", "product_name": "Tabungan Reguler", "base_rate": 2.00, "min_balance": 100000000}
+  ]
+}
+```
+
+#### Simulasi Bunga
+**Endpoint:** `POST /interest/calculate`
+
+```bash
+curl -X POST http://localhost:8080/api/v1/interest/calculate \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"product_type":"deposit","principal":100000000,"tenor_months":12}'
+```
+
+**Response:**
+```json
+{
+  "status": "success",
+  "data": {
+    "product_type": "deposit",
+    "principal": 100000000,
+    "rate": 4.50,
+    "tenor_months": 12,
+    "total_interest": 4500000,
+    "maturity_amount": 104500000,
+    "monthly_interest": 375000
+  }
+}
+```
+
+---
+
+### Standing Instructions
+
+#### Buat SI Baru
+**Endpoint:** `POST /standing-instructions`
+
+```bash
+curl -X POST http://localhost:8080/api/v1/standing-instructions \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"cif":"CIF001","from_account":"1001234567","instruction_type":"transfer","to_account":"1001234568","amount":500000,"frequency":"monthly","execution_day":1,"start_date":"2026-04-01"}'
+```
+
+#### Daftar SI Nasabah
+**Endpoint:** `GET /standing-instructions/:cif`
+
+#### Pause SI
+**Endpoint:** `PUT /standing-instructions/:si_number/pause`
+
+#### Batalkan SI
+**Endpoint:** `DELETE /standing-instructions/:si_number`
+
+#### Riwayat Eksekusi SI
+**Endpoint:** `GET /standing-instructions/:si_number/history`
+
+---
+
+### Account Management
+
+#### Buka Rekening
+**Endpoint:** `POST /accounts/open`
+
+```bash
+curl -X POST http://localhost:8080/api/v1/accounts/open \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"cif":"CIF001","account_type":"savings","currency":"IDR","initial_deposit":1000000,"branch":"JKT001"}'
+```
+
+#### Tutup Rekening
+**Endpoint:** `POST /accounts/:account_number/close`
+> Rekening harus bersaldo 0 untuk bisa ditutup.
+
+#### Daftar Rekening Dormant
+**Endpoint:** `GET /accounts/dormant`
+
+#### Aktifkan Kembali
+**Endpoint:** `POST /accounts/:account_number/reactivate`
+
+---
+
+### EOD Processing (Admin Only)
+
+#### Jalankan EOD
+**Endpoint:** `POST /admin/eod/run`
+
+```bash
+curl -X POST http://localhost:8080/api/v1/admin/eod/run \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"process_date":"2026-03-07"}'
+```
+
+**Response:**
+```json
+{
+  "status": "success",
+  "data": {
+    "process_date": "2026-03-07",
+    "overall_status": "completed",
+    "processes": [
+      {"process_type": "interest_accrual", "status": "completed", "records_processed": 5},
+      {"process_type": "si_execution", "status": "completed", "records_processed": 2},
+      {"process_type": "dormant_check", "status": "completed", "records_processed": 0}
+    ]
+  }
+}
+```
+
+#### Status EOD
+**Endpoint:** `GET /admin/eod/status/:date`
+
+#### Riwayat EOD
+**Endpoint:** `GET /admin/eod/history?date_from=2026-01-01&date_to=2026-12-31`
+
+---
+
+**Last Updated:** Maret 2026 (Phase 2 Core Banking Update)

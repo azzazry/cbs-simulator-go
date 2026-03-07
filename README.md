@@ -1,227 +1,246 @@
 # CBS Simulator - Core Banking System
 
-CBS Simulator adalah simulasi core banking yang lengkap dibangun dengan Go, Gin, dan SQLite. Cocok untuk development dan testing aplikasi mobile banking.
+CBS Simulator adalah simulasi core banking system lengkap yang dibangun dengan Go, Gin, dan SQLite. Dirancang sebagai backend untuk development dan testing aplikasi mobile banking, dengan fitur keamanan dan core banking yang menyerupai CBS bank sesungguhnya.
 
-## Features
+## Fitur
 
-Core Banking:
-- Account management dan inquiry saldo
-- Intrabank dan interbank transfer dengan fee
-- PPOB/bill payment (PLN, PDAM, Telkom, BPJS, dll)
+### Keamanan (Phase 1)
+- **JWT Authentication** — Access + refresh token, blacklisting
+- **RBAC** — 4 role: admin, supervisor, teller, customer
+- **Account Lockout** — 3x gagal login = terkunci
+- **Self-service Unlock** — Via e-KYC + OTP
+- **PIN Policy** — 6 digit, tanpa sequential/repeating
+- **Audit Trail** — Logging otomatis setiap aktivitas
+- **Rate Limiting** — 60 request/menit per IP
+- **Transaction Limits** — Batas per role (harian, per-transaksi, bulanan)
+
+### Core Banking (Phase 2)
+- **General Ledger** — Double-entry bookkeeping, 53 Chart of Accounts (kode 3-digit PAPI)
+- **CIF Enhancement** — Single customer view, data tambahan (NPWP, pendapatan, profil risiko)
+- **Mesin Bunga** — Accrual harian, tiered rates, simulasi bunga deposito/kredit
+- **Standing Instructions** — Auto-debit, transfer terjadwal (daily/weekly/monthly/quarterly)
+- **EOD Processing** — Batch: interest accrual → SI execution → monthly posting → dormant check
+- **Account Management** — Pembukaan/penutupan rekening dengan jurnal GL
+
+### Operasi Perbankan
+- Transfer intra-bank dan inter-bank dengan fee
+- PPOB/bill payment (PLN, PDAM, Telkom, BPJS)
+- QRIS Payment, Virtual Account, E-Wallet, E-Money topup
 - Card management (inquiry, block/unblock)
 - Loan dan deposit inquiry
-- Push notifications dengan FCM
-- QRIS Payment (QR Code Indonesian Standard)
-- Virtual Account (VA) Payment (Mandiri, BCA, BRI)
-- E-Wallet Top-up (OVO, DANA, GoPay)
-- E-Money Top-up (LinkAja, Mandiri e-Money)
-
-Technical:
-- RESTful API dengan response format konsisten
-- Authentication dengan PIN
-- SQLite database dengan auto-migration
-- Transaction history dengan pagination
-- Docker support
-- Indonesian banking format
-- Dynamic fee management system
+- Push notifications (FCM)
 
 ## Prerequisites
 
-- Go 1.21 or higher
+- Go 1.21+
 - SQLite3
-- Docker & Docker Compose (optional)
+- Docker & Docker Compose (opsional)
 
 ## Quick Start
 
-### Option 1: Pre-Built Executable (Windows)
-
-**cbs-simulator.exe** adalah executable yang sudah dikompilasi dan siap pakai:
+### Opsi 1: Pre-Built Executable (Windows)
 
 ```cmd
-# Langsung jalankan executable
-.\cbs-simulator.exe
+# Set JWT secret (wajib)
+set JWT_SECRET=secret-key-kamu
 
-# Server akan berjalan di http://localhost:8080
+# Jalankan
+.\cbs-simulator.exe
 ```
 
-**Apa itu cbs-simulator.exe?**
-- File binary hasil kompilasi dari Go source code
-- Tidak perlu install Go, tinggal jalankan langsung
-- Sempurna untuk testing & demo
-- Database otomatis dibuat di `./database/cbs.db`
-- Logs disimpan di `./logs/`
+Server berjalan di `http://localhost:8080`
 
-### Option 2: Run dengan Go
+### Opsi 2: Build dari Source
 
 ```bash
-go run main.go
+go build -o cbs-simulator.exe .
+./cbs-simulator.exe
 ```
 
-Server running at http://localhost:8080
-
-### Option 3: Docker
+### Opsi 3: Docker
 
 ```bash
 docker-compose up -d
-docker-compose logs -f
-docker-compose down
 ```
+
+## Environment Variables
+
+| Variable | Default | Keterangan |
+|----------|---------|------------|
+| `SERVER_PORT` | 8080 | Port server |
+| `DATABASE_PATH` | ./database/cbs.db | Path database |
+| `JWT_SECRET` | **(wajib)** | Secret key JWT |
+| `ENVIRONMENT` | development | development/production |
+| `MAX_LOGIN_ATTEMPTS` | 3 | Batas gagal login |
+| `LOCKOUT_DURATION_MINUTES` | 30 | Durasi lockout |
+| `RATE_LIMIT_PER_MINUTE` | 60 | Rate limit per IP |
 
 ## Database
 
-Database SQLite otomatis dibuat di ./database/cbs.db dengan:
-- Complete schema
-- 5 sample customers
-- Sample accounts, cards, loans, deposits, bills
+Database SQLite otomatis dibuat dengan 25 tabel dan sample data.
 
-Sample Customers (PIN: 123456):
-- CIF001: Budi Santoso (accounts 1001234567, 2001234567)
-- CIF002: Siti Nurhaliza (accounts 1001234568, 3001234568)
-- CIF003: Ahmad Wijaya (accounts 1001234569, 2001234569)
-- CIF004: Dewi Lestari (accounts 1001234570, 4001234570)
-- CIF005: Rizki Pratama (accounts 1001234571, 2001234571)
+**Sample Customers** (PIN: `123456`):
+
+| CIF | Nama | Akun |
+|-----|------|------|
+| CIF001 | Budi Santoso | 1001234567, 2001234567 |
+| CIF002 | Siti Nurhaliza | 1001234568, 3001234568 |
+| CIF003 | Ahmad Wijaya | 1001234569, 2001234569 |
+| CIF004 | Dewi Lestari | 1001234570, 4001234570 |
+| CIF005 | Rizki Pratama | 1001234571, 2001234571 |
 
 ## API Endpoints
 
-Auth:
-- POST /api/v1/auth/login
-- POST /api/v1/auth/register
-- POST /api/v1/auth/change-pin
+### Auth (Public)
+| Method | Endpoint | Keterangan |
+|--------|----------|------------|
+| POST | `/api/v1/auth/login` | Login, return JWT |
+| POST | `/api/v1/auth/register` | Registrasi nasabah baru |
+| POST | `/api/v1/auth/otp/request` | Request OTP |
+| POST | `/api/v1/auth/otp/verify` | Verifikasi OTP |
+| POST | `/api/v1/auth/ekyc/verify` | Verifikasi e-KYC |
+| POST | `/api/v1/auth/unlock` | Unlock akun (e-KYC + OTP) |
+| POST | `/api/v1/auth/reset-pin` | Reset PIN via e-KYC |
 
-Customer & Accounts:
-- GET /api/v1/customers/:cif
-- GET /api/v1/customers/:cif/accounts
-- GET /api/v1/accounts/:account_number
-- GET /api/v1/accounts/:account_number/statement
+### Auth (Protected — JWT Required)
+| Method | Endpoint | Keterangan |
+|--------|----------|------------|
+| POST | `/api/v1/auth/logout` | Logout, revoke token |
+| POST | `/api/v1/auth/refresh` | Refresh access token |
+| POST | `/api/v1/auth/change-pin` | Ganti PIN |
+| GET | `/api/v1/auth/profile` | Profil user |
 
-Transfers:
-- POST /api/v1/transfers/intra
-- POST /api/v1/transfers/inter
-- GET /api/v1/transfers/:transaction_id
+### Banking
+| Method | Endpoint | Keterangan |
+|--------|----------|------------|
+| GET | `/api/v1/customers/:cif` | Data nasabah |
+| GET | `/api/v1/accounts/:account_number` | Saldo rekening |
+| GET | `/api/v1/accounts/:account_number/transactions` | Mutasi |
+| POST | `/api/v1/transfers/intra` | Transfer intra-bank |
+| POST | `/api/v1/transfers/inter` | Transfer inter-bank |
+| POST | `/api/v1/bills/pay` | Bayar tagihan |
 
-Bill Payments:
-- GET /api/v1/bills/billers
-- GET /api/v1/bills/inquiry
-- POST /api/v1/bills/pay
+### General Ledger
+| Method | Endpoint | Keterangan |
+|--------|----------|------------|
+| GET | `/api/v1/gl/chart-of-accounts` | Daftar akun GL |
+| GET | `/api/v1/gl/journal-entries` | Jurnal entries |
+| GET | `/api/v1/gl/journal-entries/:id` | Detail jurnal |
+| GET | `/api/v1/gl/trial-balance` | Neraca saldo |
+| GET | `/api/v1/gl/account-balance/:code` | Saldo akun GL |
 
-Cards:
-- GET /api/v1/customers/:cif/cards
-- GET /api/v1/cards/:card_number
-- POST /api/v1/cards/block
-- POST /api/v1/cards/unblock
+### CIF Enhancement
+| Method | Endpoint | Keterangan |
+|--------|----------|------------|
+| GET | `/api/v1/customers/:cif/overview` | Single customer view |
+| PUT | `/api/v1/customers/:cif/extended` | Update data tambahan |
+| GET | `/api/v1/customers/search?q=` | Cari nasabah |
 
-Loans & Deposits:
-- GET /api/v1/customers/:cif/loans
-- GET /api/v1/customers/:cif/deposits
-- POST /api/v1/payments/qris (QRIS Payment)
-- POST /api/v1/payments/va (Virtual Account Payment)
-- POST /api/v1/payments/ewallet/topup (E-Wallet Top-up)
-- GET /api/v1/payments/ewallet/providers
-- POST /api/v1/payments/emoney/topup (E-Money Top-up)
-- GET /api/v1/payments/emoney/providers
-- GET /api/v1/payments/va/providers
+### Bunga & Simulasi
+| Method | Endpoint | Keterangan |
+|--------|----------|------------|
+| GET | `/api/v1/interest/rates` | Daftar suku bunga |
+| POST | `/api/v1/interest/calculate` | Simulasi bunga |
 
-Health:
-- GET /health
+### Standing Instructions
+| Method | Endpoint | Keterangan |
+|--------|----------|------------|
+| POST | `/api/v1/standing-instructions` | Buat SI baru |
+| GET | `/api/v1/standing-instructions/:cif` | Daftar SI nasabah |
+| PUT | `/api/v1/standing-instructions/:si/pause` | Pause SI |
+| DELETE | `/api/v1/standing-instructions/:si` | Batalkan SI |
+| GET | `/api/v1/standing-instructions/:si/history` | Riwayat eksekusi |
 
-See docs/API.md for complete documentation with request/response examples.
+### Account Management
+| Method | Endpoint | Keterangan |
+|--------|----------|------------|
+| POST | `/api/v1/accounts/open` | Buka rekening baru |
+| POST | `/api/v1/accounts/:account_number/close` | Tutup rekening |
+| GET | `/api/v1/accounts/dormant` | Daftar rekening dormant |
+| POST | `/api/v1/accounts/:account_number/reactivate` | Aktifkan kembali |
 
-## Testing Endpoints
+### Admin (Require Role: admin/supervisor)
+| Method | Endpoint | Keterangan |
+|--------|----------|------------|
+| GET | `/api/v1/admin/audit-logs` | Audit trail |
+| GET | `/api/v1/admin/transaction-limits` | Batas transaksi |
+| PUT | `/api/v1/admin/transaction-limits` | Update batas |
+| GET | `/api/v1/admin/roles` | Daftar role |
+| POST | `/api/v1/admin/roles/assign` | Assign role |
+| POST | `/api/v1/admin/unlock-account` | Force unlock |
+| POST | `/api/v1/admin/eod/run` | Jalankan EOD |
+| GET | `/api/v1/admin/eod/status/:date` | Status EOD |
+| GET | `/api/v1/admin/eod/history` | Riwayat EOD |
 
-### Automated Test Scripts
+### Payment Channels
+| Method | Endpoint | Keterangan |
+|--------|----------|------------|
+| POST | `/api/v1/payments/qris` | QRIS Payment |
+| POST | `/api/v1/payments/va` | Virtual Account |
+| POST | `/api/v1/payments/ewallet/topup` | E-Wallet Top-up |
+| POST | `/api/v1/payments/emoney/topup` | E-Money Top-up |
 
-**test_payment_features.bat** (Windows) dan **test_payment_features.sh** (Linux/Mac)
+**Lihat `docs/API.md` untuk dokumentasi lengkap dengan contoh request/response.**
 
-Apa itu test scripts?
-- Automated testing untuk semua endpoint
-- Menggunakan curl untuk send HTTP requests
-- Menampilkan response JSON yang rapi dengan jq
-- Mencakup 4 fitur payment utama:
-  - **Provider endpoints** - List semua payment providers
-  - **QRIS payment** - QR code payment testing
-  - **Virtual Account** - Bank VA payment testing
-  - **E-Wallet** - OVO, DANA, GoPay top-up testing
-  - **E-Money** - LinkAja, Mandiri e-Money testing
+## Testing
 
-**Cara menjalankan:**
-
-Windows:
-```cmd
-.\test_payment_features.bat
-```
-
-Linux/Mac:
 ```bash
-chmod +x test_payment_features.sh
-./test_payment_features.sh
+# Jalankan semua 60 test
+go test ./services/ -v
+
+# Test spesifik
+go test ./services/ -v -run TestCreateJournalEntry
 ```
 
-**Output:**
-- ✅ Sukses: Response JSON ditampilkan
-- ❌ Error: Pesan error ditampilkan dengan jelas
-- ⏱️ Processing time ditampilkan di setiap test
-
-**API Response Format
-
-Success:
-```json
-{
-  "status": "success",
-  "data": {}
-}
-```
-
-Error:
-```json
-{
-  "status": "error",
-  "message": "Error description"
-}
-```
+Lihat `docs/TESTING.md` untuk detail lengkap.
 
 ## Project Structure
 
 ```
 cbs-simulator/
 ├── api/
-│   ├── handlers/       # HTTP handlers
-│   ├── middleware/     # Middleware
-│   └── routes/         # Routes
-├── config/             # Configuration
-├── database/           # Database setup
-│   ├── migrations/     # Schema
-│   └── seeders/        # Sample data
-├── models/             # Data models
-├── services/           # Business logic
-├── utils/              # Helpers
-├── docs/               # Documentation
+│   ├── handlers/          # HTTP handlers
+│   │   ├── auth_handler.go
+│   │   ├── banking_handler.go
+│   │   └── core_banking_handler.go
+│   ├── middleware/         # JWT, RBAC, Audit, Rate Limiter
+│   └── routes/
+├── config/                 # Environment config
+├── database/
+│   ├── migrations/         # 6 migration files (25 tabel)
+│   └── seeders/            # Sample data
+├── models/                 # 29 data models
+├── services/               # 20 service files + tests
+├── utils/                  # Hash, helpers
+├── docs/                   # API.md, API_SECURITY.md, TESTING.md
 ├── main.go
-├── go.mod
 ├── Dockerfile
-├── docker-compose.yml
-└── .env.example
+└── docker-compose.yml
 ```
 
-## Configuration
+## Dokumentasi
 
-Edit .env file:
+| File | Keterangan |
+|------|------------|
+| `docs/API.md` | Dokumentasi API lengkap |
+| `docs/API_SECURITY.md` | Dokumentasi endpoint keamanan |
+| `docs/TESTING.md` | Panduan testing |
+| `docs/BANKING_FEES.md` | Daftar biaya transaksi |
+| `docs/FLUTTER_INTEGRATION.md` | Panduan integrasi Flutter |
 
-```env
-SERVER_PORT=8080
-DATABASE_PATH=./database/cbs.db
-JWT_SECRET=your-secret-key
-ENVIRONMENT=development
+## Response Format
+
+```json
+// Sukses
+{"status": "success", "data": {}}
+
+// Error
+{"status": "error", "message": "Deskripsi error"}
+
+// Login sukses
+{"status": "success", "data": {"access_token": "...", "refresh_token": "...", "role": "customer"}}
 ```
 
-## Database Schema
+## License
 
-Tables:
-- customers
-- accounts
-- transactions
-- cards
-- loans
-- deposits
-- bill_payments
-
-See database/migrations/001_init_schema.sql for complete schema.
+MIT License
