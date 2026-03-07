@@ -310,3 +310,162 @@ type EKYCVerification struct {
 	VerifiedAt         *time.Time `json:"verified_at" db:"verified_at"`
 	CreatedAt          time.Time  `json:"created_at" db:"created_at"`
 }
+
+// =============================================
+// Phase 2: Core Banking Models
+// =============================================
+
+// ChartOfAccount represents a general ledger account in the CoA
+type ChartOfAccount struct {
+	ID            int       `json:"id" db:"id"`
+	AccountCode   string    `json:"account_code" db:"account_code"`
+	AccountName   string    `json:"account_name" db:"account_name"`
+	AccountType   string    `json:"account_type" db:"account_type"`
+	ParentCode    *string   `json:"parent_code" db:"parent_code"`
+	Level         int       `json:"level" db:"level"`
+	NormalBalance string    `json:"normal_balance" db:"normal_balance"`
+	IsActive      int       `json:"is_active" db:"is_active"`
+	CreatedAt     time.Time `json:"created_at" db:"created_at"`
+}
+
+// JournalEntry represents a double-entry journal posting
+type JournalEntry struct {
+	ID            int       `json:"id" db:"id"`
+	JournalNumber string    `json:"journal_number" db:"journal_number"`
+	EntryDate     string    `json:"entry_date" db:"entry_date"`
+	Description   string    `json:"description" db:"description"`
+	ReferenceType string    `json:"reference_type" db:"reference_type"`
+	ReferenceID   string    `json:"reference_id" db:"reference_id"`
+	PostedBy      string    `json:"posted_by" db:"posted_by"`
+	Status        string    `json:"status" db:"status"`
+	ReversedBy    *int      `json:"reversed_by" db:"reversed_by"`
+	CreatedAt     time.Time `json:"created_at" db:"created_at"`
+}
+
+// JournalLine represents a single debit or credit line in a journal entry
+type JournalLine struct {
+	ID           int     `json:"id" db:"id"`
+	JournalID    int     `json:"journal_id" db:"journal_id"`
+	AccountCode  string  `json:"account_code" db:"account_code"`
+	AccountName  string  `json:"account_name,omitempty"`
+	DebitAmount  float64 `json:"debit_amount" db:"debit_amount"`
+	CreditAmount float64 `json:"credit_amount" db:"credit_amount"`
+	Description  string  `json:"description" db:"description"`
+}
+
+// CustomerExtended represents additional CIF data for banking
+type CustomerExtended struct {
+	ID               int       `json:"id" db:"id"`
+	CIF              string    `json:"cif" db:"cif"`
+	MotherMaidenName string    `json:"mother_maiden_name" db:"mother_maiden_name"`
+	Nationality      string    `json:"nationality" db:"nationality"`
+	Occupation       string    `json:"occupation" db:"occupation"`
+	EmployerName     string    `json:"employer_name" db:"employer_name"`
+	MonthlyIncome    float64   `json:"monthly_income" db:"monthly_income"`
+	SourceOfFunds    string    `json:"source_of_funds" db:"source_of_funds"`
+	RiskProfile      string    `json:"risk_profile" db:"risk_profile"`
+	Segment          string    `json:"segment" db:"segment"`
+	BranchCode       string    `json:"branch_code" db:"branch_code"`
+	RMCode           string    `json:"rm_code" db:"rm_code"`
+	NPWP             string    `json:"npwp" db:"npwp"`
+	LastKYCDate      *string   `json:"last_kyc_date" db:"last_kyc_date"`
+	NextKYCDate      *string   `json:"next_kyc_date" db:"next_kyc_date"`
+	CreatedAt        time.Time `json:"created_at" db:"created_at"`
+	UpdatedAt        time.Time `json:"updated_at" db:"updated_at"`
+}
+
+// InterestRate represents interest rate configuration
+type InterestRate struct {
+	ID            int      `json:"id" db:"id"`
+	ProductType   string   `json:"product_type" db:"product_type"`
+	ProductName   string   `json:"product_name" db:"product_name"`
+	RateType      string   `json:"rate_type" db:"rate_type"`
+	BaseRate      float64  `json:"base_rate" db:"base_rate"`
+	MinBalance    float64  `json:"min_balance" db:"min_balance"`
+	MaxBalance    *float64 `json:"max_balance" db:"max_balance"`
+	TenorMonths   *int     `json:"tenor_months" db:"tenor_months"`
+	EffectiveDate string   `json:"effective_date" db:"effective_date"`
+	IsActive      int      `json:"is_active" db:"is_active"`
+}
+
+// InterestAccrual represents daily interest calculation record
+type InterestAccrual struct {
+	ID              int     `json:"id" db:"id"`
+	AccountNumber   string  `json:"account_number" db:"account_number"`
+	AccrualDate     string  `json:"accrual_date" db:"accrual_date"`
+	ProductType     string  `json:"product_type" db:"product_type"`
+	Balance         float64 `json:"balance" db:"balance"`
+	Rate            float64 `json:"rate" db:"rate"`
+	DailyInterest   float64 `json:"daily_interest" db:"daily_interest"`
+	AccruedInterest float64 `json:"accrued_interest" db:"accrued_interest"`
+	IsPosted        int     `json:"is_posted" db:"is_posted"`
+}
+
+// StandingInstruction represents a recurring payment instruction
+type StandingInstruction struct {
+	ID                int       `json:"id" db:"id"`
+	SINumber          string    `json:"si_number" db:"si_number"`
+	CIF               string    `json:"cif" db:"cif"`
+	FromAccount       string    `json:"from_account" db:"from_account"`
+	InstructionType   string    `json:"instruction_type" db:"instruction_type"`
+	ToAccount         string    `json:"to_account" db:"to_account"`
+	ToBankCode        string    `json:"to_bank_code" db:"to_bank_code"`
+	Amount            float64   `json:"amount" db:"amount"`
+	Description       string    `json:"description" db:"description"`
+	Frequency         string    `json:"frequency" db:"frequency"`
+	ExecutionDay      int       `json:"execution_day" db:"execution_day"`
+	StartDate         string    `json:"start_date" db:"start_date"`
+	EndDate           *string   `json:"end_date" db:"end_date"`
+	NextExecutionDate string    `json:"next_execution_date" db:"next_execution_date"`
+	TotalExecuted     int       `json:"total_executed" db:"total_executed"`
+	TotalFailed       int       `json:"total_failed" db:"total_failed"`
+	LastExecutionDate *string   `json:"last_execution_date" db:"last_execution_date"`
+	LastStatus        string    `json:"last_status" db:"last_status"`
+	Status            string    `json:"status" db:"status"`
+	CreatedAt         time.Time `json:"created_at" db:"created_at"`
+}
+
+// SIExecution represents an execution log for a standing instruction
+type SIExecution struct {
+	ID            int       `json:"id" db:"id"`
+	SINumber      string    `json:"si_number" db:"si_number"`
+	ExecutionDate string    `json:"execution_date" db:"execution_date"`
+	Amount        float64   `json:"amount" db:"amount"`
+	TransactionID string    `json:"transaction_id" db:"transaction_id"`
+	Status        string    `json:"status" db:"status"`
+	ErrorMessage  string    `json:"error_message" db:"error_message"`
+	CreatedAt     time.Time `json:"created_at" db:"created_at"`
+}
+
+// EODLog represents end-of-day processing log
+type EODLog struct {
+	ID               int        `json:"id" db:"id"`
+	ProcessDate      string     `json:"process_date" db:"process_date"`
+	ProcessType      string     `json:"process_type" db:"process_type"`
+	Status           string     `json:"status" db:"status"`
+	RecordsProcessed int        `json:"records_processed" db:"records_processed"`
+	RecordsFailed    int        `json:"records_failed" db:"records_failed"`
+	StartedAt        *time.Time `json:"started_at" db:"started_at"`
+	CompletedAt      *time.Time `json:"completed_at" db:"completed_at"`
+	ErrorMessage     string     `json:"error_message" db:"error_message"`
+}
+
+// SingleCustomerView represents the full customer overview
+type SingleCustomerView struct {
+	Customer Customer          `json:"customer"`
+	Extended *CustomerExtended `json:"extended"`
+	Accounts []Account         `json:"accounts"`
+	Loans    []Loan            `json:"loans"`
+	Deposits []Deposit         `json:"deposits"`
+	Cards    []Card            `json:"cards"`
+	Roles    []string          `json:"roles"`
+}
+
+// TrialBalance represents a trial balance report line
+type TrialBalance struct {
+	AccountCode   string  `json:"account_code"`
+	AccountName   string  `json:"account_name"`
+	AccountType   string  `json:"account_type"`
+	DebitBalance  float64 `json:"debit_balance"`
+	CreditBalance float64 `json:"credit_balance"`
+}

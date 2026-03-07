@@ -62,6 +62,7 @@ func runMigrations() error {
 		"./database/migrations/003_add_banks.sql",
 		"./database/migrations/004_add_transfer_fees.sql",
 		"./database/migrations/005_add_security_tables.sql",
+		"./database/migrations/006_core_banking.sql",
 	}
 
 	for _, migrationFile := range migrationFiles {
@@ -84,6 +85,7 @@ func runSeeders() error {
 	seederFiles := []string{
 		"./database/seeders/001_sample_data.sql",
 		"./database/seeders/005_security_seed.sql",
+		"./database/seeders/006_core_banking_seed.sql",
 	}
 
 	for _, seederFile := range seederFiles {

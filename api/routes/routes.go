@@ -127,6 +127,46 @@ func SetupRoutes(router *gin.Engine) {
 			payments.POST("/emoney/topup", handlers.ProcessEMoneyTopup)
 		}
 
+		// === Phase 2: Core Banking Routes ===
+
+		// General Ledger
+		gl := protected.Group("/gl")
+		{
+			gl.GET("/chart-of-accounts", handlers.GetChartOfAccounts)
+			gl.GET("/journal-entries", handlers.GetJournalEntries)
+			gl.GET("/journal-entries/:id", handlers.GetJournalDetail)
+			gl.GET("/trial-balance", handlers.GetTrialBalance)
+			gl.GET("/account-balance/:code", handlers.GetGLAccountBalance)
+		}
+
+		// CIF Enhancement
+		protected.GET("/customers/:cif/overview", handlers.GetCustomerOverview)
+		protected.PUT("/customers/:cif/extended", handlers.UpdateCustomerExtended)
+		protected.GET("/customers/search", handlers.SearchCustomers)
+
+		// Interest
+		interest := protected.Group("/interest")
+		{
+			interest.GET("/rates", handlers.GetInterestRates)
+			interest.POST("/calculate", handlers.SimulateInterest)
+		}
+
+		// Standing Instructions
+		si := protected.Group("/standing-instructions")
+		{
+			si.POST("", handlers.CreateStandingInstruction)
+			si.GET("/:cif", handlers.GetStandingInstructions)
+			si.PUT("/:si/pause", handlers.PauseStandingInstruction)
+			si.DELETE("/:si", handlers.CancelStandingInstruction)
+			si.GET("/:si/history", handlers.GetSIHistory)
+		}
+
+		// Account Management
+		protected.POST("/accounts/open", handlers.OpenAccountHandler)
+		protected.POST("/accounts/:account_number/close", handlers.CloseAccountHandler)
+		protected.GET("/accounts/dormant", handlers.GetDormantAccounts)
+		protected.POST("/accounts/:account_number/reactivate", handlers.ReactivateAccountHandler)
+
 		// === Admin routes (require admin role) ===
 		admin := protected.Group("/admin")
 		admin.Use(middleware.RequireRole("admin", "supervisor"))
@@ -137,6 +177,11 @@ func SetupRoutes(router *gin.Engine) {
 			admin.GET("/roles", handlers.GetUserRolesHandler)
 			admin.POST("/roles/assign", handlers.AssignRoleHandler)
 			admin.POST("/unlock-account", handlers.AdminUnlockAccount)
+
+			// Phase 2 Admin: EOD Processing
+			admin.POST("/eod/run", handlers.RunEOD)
+			admin.GET("/eod/status/:date", handlers.GetEODStatus)
+			admin.GET("/eod/history", handlers.GetEODHistory)
 		}
 	}
 }

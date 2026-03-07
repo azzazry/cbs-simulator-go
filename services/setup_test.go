@@ -152,6 +152,211 @@ func setupTestDB(t *testing.T) {
 		t.Fatalf("Failed to create security tables: %v", err)
 	}
 
+	// Create Phase 2: Core Banking tables
+	coreBankingSQL := `
+		CREATE TABLE IF NOT EXISTS accounts (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			account_number VARCHAR(20) UNIQUE NOT NULL,
+			cif VARCHAR(20) NOT NULL,
+			account_type VARCHAR(20) NOT NULL,
+			currency VARCHAR(3) DEFAULT 'IDR',
+			balance DECIMAL(18,2) DEFAULT 0.00,
+			avail_balance DECIMAL(18,2) DEFAULT 0.00,
+			status VARCHAR(20) DEFAULT 'active',
+			opened_date DATE NOT NULL,
+			branch VARCHAR(50),
+			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+		);
+
+		CREATE TABLE IF NOT EXISTS chart_of_accounts (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			account_code VARCHAR(10) UNIQUE NOT NULL,
+			account_name VARCHAR(100) NOT NULL,
+			account_type VARCHAR(20) NOT NULL,
+			parent_code VARCHAR(10),
+			level INTEGER DEFAULT 1,
+			normal_balance VARCHAR(10) NOT NULL,
+			is_active INTEGER DEFAULT 1,
+			created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+		);
+
+		CREATE TABLE IF NOT EXISTS journal_entries (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			journal_number VARCHAR(30) UNIQUE NOT NULL,
+			entry_date DATE NOT NULL,
+			description TEXT,
+			reference_type VARCHAR(30),
+			reference_id VARCHAR(50),
+			posted_by VARCHAR(20),
+			status VARCHAR(20) DEFAULT 'posted',
+			reversed_by INTEGER,
+			created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+		);
+
+		CREATE TABLE IF NOT EXISTS journal_lines (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			journal_id INTEGER NOT NULL,
+			account_code VARCHAR(10) NOT NULL,
+			debit_amount DECIMAL(18,2) DEFAULT 0,
+			credit_amount DECIMAL(18,2) DEFAULT 0,
+			description TEXT
+		);
+
+		CREATE TABLE IF NOT EXISTS customer_extended (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			cif VARCHAR(20) UNIQUE NOT NULL,
+			mother_maiden_name VARCHAR(100),
+			nationality VARCHAR(50) DEFAULT 'WNI',
+			occupation VARCHAR(100),
+			employer_name VARCHAR(100),
+			monthly_income DECIMAL(18,2),
+			source_of_funds VARCHAR(100),
+			risk_profile VARCHAR(20) DEFAULT 'low',
+			segment VARCHAR(30) DEFAULT 'mass',
+			branch_code VARCHAR(20),
+			rm_code VARCHAR(20),
+			npwp VARCHAR(20),
+			last_kyc_date DATE,
+			next_kyc_date DATE,
+			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+		);
+
+		CREATE TABLE IF NOT EXISTS interest_rates (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			product_type VARCHAR(30) NOT NULL,
+			product_name VARCHAR(50),
+			rate_type VARCHAR(20) NOT NULL,
+			base_rate DECIMAL(8,4) NOT NULL,
+			min_balance DECIMAL(18,2) DEFAULT 0,
+			max_balance DECIMAL(18,2),
+			tenor_months INTEGER,
+			effective_date DATE NOT NULL,
+			is_active INTEGER DEFAULT 1,
+			created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+		);
+
+		CREATE TABLE IF NOT EXISTS interest_accruals (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			account_number VARCHAR(20) NOT NULL,
+			accrual_date DATE NOT NULL,
+			product_type VARCHAR(30) NOT NULL,
+			balance DECIMAL(18,2) NOT NULL,
+			rate DECIMAL(8,4) NOT NULL,
+			daily_interest DECIMAL(18,4) NOT NULL,
+			accrued_interest DECIMAL(18,4) NOT NULL,
+			is_posted INTEGER DEFAULT 0,
+			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			UNIQUE(account_number, accrual_date)
+		);
+
+		CREATE TABLE IF NOT EXISTS standing_instructions (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			si_number VARCHAR(30) UNIQUE NOT NULL,
+			cif VARCHAR(20) NOT NULL,
+			from_account VARCHAR(20) NOT NULL,
+			instruction_type VARCHAR(30) NOT NULL,
+			to_account VARCHAR(20),
+			to_bank_code VARCHAR(20),
+			amount DECIMAL(18,2) NOT NULL,
+			description TEXT,
+			frequency VARCHAR(20) NOT NULL,
+			execution_day INTEGER,
+			start_date DATE NOT NULL,
+			end_date DATE,
+			next_execution_date DATE NOT NULL,
+			total_executed INTEGER DEFAULT 0,
+			total_failed INTEGER DEFAULT 0,
+			last_execution_date DATE,
+			last_status VARCHAR(20),
+			status VARCHAR(20) DEFAULT 'active',
+			created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+		);
+
+		CREATE TABLE IF NOT EXISTS si_executions (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			si_number VARCHAR(30) NOT NULL,
+			execution_date DATE NOT NULL,
+			amount DECIMAL(18,2) NOT NULL,
+			transaction_id VARCHAR(50),
+			status VARCHAR(20) NOT NULL,
+			error_message TEXT,
+			created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+		);
+
+		CREATE TABLE IF NOT EXISTS eod_logs (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			process_date DATE NOT NULL,
+			process_type VARCHAR(30) NOT NULL,
+			status VARCHAR(20) NOT NULL,
+			records_processed INTEGER DEFAULT 0,
+			records_failed INTEGER DEFAULT 0,
+			started_at DATETIME,
+			completed_at DATETIME,
+			error_message TEXT,
+			created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+		);
+
+		CREATE TABLE IF NOT EXISTS cards (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			card_number VARCHAR(16) UNIQUE NOT NULL,
+			cif VARCHAR(20) NOT NULL,
+			account_number VARCHAR(20) NOT NULL,
+			card_type VARCHAR(20) NOT NULL,
+			card_brand VARCHAR(20) NOT NULL,
+			card_limit DECIMAL(18,2) DEFAULT 0.00,
+			avail_limit DECIMAL(18,2) DEFAULT 0.00,
+			expiry_date VARCHAR(7) NOT NULL,
+			status VARCHAR(20) DEFAULT 'active',
+			cvv VARCHAR(3) NOT NULL,
+			pin VARCHAR(255) NOT NULL,
+			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+		);
+
+		CREATE TABLE IF NOT EXISTS loans (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			loan_number VARCHAR(20) UNIQUE NOT NULL,
+			cif VARCHAR(20) NOT NULL,
+			account_number VARCHAR(20) NOT NULL,
+			loan_type VARCHAR(30) NOT NULL,
+			principal_amount DECIMAL(18,2) NOT NULL,
+			outstanding_amount DECIMAL(18,2) NOT NULL,
+			interest_rate DECIMAL(5,2) NOT NULL,
+			monthly_payment DECIMAL(18,2) NOT NULL,
+			tenor_months INTEGER NOT NULL,
+			remaining_months INTEGER NOT NULL,
+			disbursement_date DATE NOT NULL,
+			maturity_date DATE NOT NULL,
+			next_payment_date DATE NOT NULL,
+			status VARCHAR(20) DEFAULT 'active',
+			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+		);
+
+		CREATE TABLE IF NOT EXISTS deposits (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			deposit_number VARCHAR(20) UNIQUE NOT NULL,
+			cif VARCHAR(20) NOT NULL,
+			principal_amount DECIMAL(18,2) NOT NULL,
+			interest_rate DECIMAL(5,2) NOT NULL,
+			tenor_months INTEGER NOT NULL,
+			open_date DATE NOT NULL,
+			maturity_date DATE NOT NULL,
+			maturity_amount DECIMAL(18,2) NOT NULL,
+			auto_renew BOOLEAN DEFAULT 0,
+			status VARCHAR(20) DEFAULT 'active',
+			linked_account VARCHAR(20),
+			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+		);
+	`
+	_, err = database.DB.Exec(coreBankingSQL)
+	if err != nil {
+		t.Fatalf("Failed to create core banking tables: %v", err)
+	}
+
 	// Seed test data
 	seedTestData(t)
 }
@@ -209,6 +414,64 @@ func seedTestData(t *testing.T) {
 	`)
 	if err != nil {
 		t.Fatalf("Failed to seed transaction limits: %v", err)
+	}
+
+	// Phase 2: Seed accounts
+	_, err = database.DB.Exec(`
+		INSERT INTO accounts (account_number, cif, account_type, currency, balance, avail_balance, status, opened_date, branch) VALUES
+		('1000000001', 'CIF001', 'savings', 'IDR', 50000000.00, 50000000.00, 'active', '2025-01-01', 'JKT001'),
+		('1000000002', 'CIF002', 'savings', 'IDR', 25000000.00, 25000000.00, 'active', '2025-01-01', 'JKT002'),
+		('1000000003', 'CIF003', 'savings', 'IDR', 100000000.00, 100000000.00, 'active', '2025-03-01', 'JKT003')
+	`)
+	if err != nil {
+		t.Fatalf("Failed to seed accounts: %v", err)
+	}
+
+	// Phase 2: Seed Chart of Accounts
+	_, err = database.DB.Exec(`
+		INSERT INTO chart_of_accounts (account_code, account_name, account_type, parent_code, level, normal_balance) VALUES
+		('100', 'ASET', 'asset', NULL, 1, 'debit'),
+		('110', 'Kas dan Setara Kas', 'asset', '100', 2, 'debit'),
+		('111', 'Kas', 'asset', '110', 3, 'debit'),
+		('200', 'KEWAJIBAN', 'liability', NULL, 1, 'credit'),
+		('210', 'Dana Pihak Ketiga', 'liability', '200', 2, 'credit'),
+		('211', 'Tabungan', 'liability', '210', 3, 'credit'),
+		('400', 'PENDAPATAN', 'revenue', NULL, 1, 'credit'),
+		('422', 'Pendapatan Fee Transaksi', 'revenue', '400', 3, 'credit'),
+		('500', 'BEBAN', 'expense', NULL, 1, 'debit'),
+		('511', 'Beban Bunga Tabungan', 'expense', '500', 3, 'debit')
+	`)
+	if err != nil {
+		t.Fatalf("Failed to seed CoA: %v", err)
+	}
+
+	// Phase 2: Seed interest rates
+	_, err = database.DB.Exec(`
+		INSERT INTO interest_rates (product_type, product_name, rate_type, base_rate, min_balance, max_balance, effective_date) VALUES
+		('savings', 'Tabungan Reguler', 'tiered', 1.00, 0, 100000000, '2026-01-01'),
+		('savings', 'Tabungan Reguler', 'tiered', 2.00, 100000000, NULL, '2026-01-01');
+		INSERT INTO interest_rates (product_type, product_name, rate_type, base_rate, tenor_months, effective_date) VALUES
+		('deposit', 'Deposito 12 Bulan', 'fixed', 4.50, 12, '2026-01-01')
+	`)
+	if err != nil {
+		t.Fatalf("Failed to seed interest rates: %v", err)
+	}
+
+	// Phase 2: Seed deposits & loans for testing
+	_, err = database.DB.Exec(`
+		INSERT INTO deposits (deposit_number, cif, principal_amount, interest_rate, tenor_months, open_date, maturity_date, maturity_amount, status, linked_account) VALUES
+		('DEP001', 'CIF001', 100000000, 4.50, 12, '2025-01-01', '2026-01-01', 104500000, 'active', '1000000001')
+	`)
+	if err != nil {
+		t.Fatalf("Failed to seed deposits: %v", err)
+	}
+
+	_, err = database.DB.Exec(`
+		INSERT INTO loans (loan_number, cif, account_number, loan_type, principal_amount, outstanding_amount, interest_rate, monthly_payment, tenor_months, remaining_months, disbursement_date, maturity_date, next_payment_date, status) VALUES
+		('LOAN001', 'CIF001', '1000000001', 'kpr', 500000000, 450000000, 7.50, 5800000, 120, 108, '2025-01-01', '2035-01-01', '2026-04-01', 'active')
+	`)
+	if err != nil {
+		t.Fatalf("Failed to seed loans: %v", err)
 	}
 }
 
