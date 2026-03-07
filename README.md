@@ -10,6 +10,11 @@ Core Banking:
 - PPOB/bill payment (PLN, PDAM, Telkom, BPJS, dll)
 - Card management (inquiry, block/unblock)
 - Loan dan deposit inquiry
+- Push notifications dengan FCM
+- QRIS Payment (QR Code Indonesian Standard)
+- Virtual Account (VA) Payment (Mandiri, BCA, BRI)
+- E-Wallet Top-up (OVO, DANA, GoPay)
+- E-Money Top-up (LinkAja, Mandiri e-Money)
 
 Technical:
 - RESTful API dengan response format konsisten
@@ -18,6 +23,7 @@ Technical:
 - Transaction history dengan pagination
 - Docker support
 - Indonesian banking format
+- Dynamic fee management system
 
 ## Prerequisites
 
@@ -27,16 +33,34 @@ Technical:
 
 ## Quick Start
 
-Run Locally:
+### Option 1: Pre-Built Executable (Windows)
+
+**cbs-simulator.exe** adalah executable yang sudah dikompilasi dan siap pakai:
+
+```cmd
+# Langsung jalankan executable
+.\cbs-simulator.exe
+
+# Server akan berjalan di http://localhost:8080
+```
+
+**Apa itu cbs-simulator.exe?**
+- File binary hasil kompilasi dari Go source code
+- Tidak perlu install Go, tinggal jalankan langsung
+- Sempurna untuk testing & demo
+- Database otomatis dibuat di `./database/cbs.db`
+- Logs disimpan di `./logs/`
+
+### Option 2: Run dengan Go
+
 ```bash
-cp .env.example .env
-go mod download
 go run main.go
 ```
 
 Server running at http://localhost:8080
 
-Run with Docker:
+### Option 3: Docker
+
 ```bash
 docker-compose up -d
 docker-compose logs -f
@@ -89,13 +113,55 @@ Cards:
 Loans & Deposits:
 - GET /api/v1/customers/:cif/loans
 - GET /api/v1/customers/:cif/deposits
+- POST /api/v1/payments/qris (QRIS Payment)
+- POST /api/v1/payments/va (Virtual Account Payment)
+- POST /api/v1/payments/ewallet/topup (E-Wallet Top-up)
+- GET /api/v1/payments/ewallet/providers
+- POST /api/v1/payments/emoney/topup (E-Money Top-up)
+- GET /api/v1/payments/emoney/providers
+- GET /api/v1/payments/va/providers
 
 Health:
 - GET /health
 
 See docs/API.md for complete documentation with request/response examples.
 
-## API Response Format
+## Testing Endpoints
+
+### Automated Test Scripts
+
+**test_payment_features.bat** (Windows) dan **test_payment_features.sh** (Linux/Mac)
+
+Apa itu test scripts?
+- Automated testing untuk semua endpoint
+- Menggunakan curl untuk send HTTP requests
+- Menampilkan response JSON yang rapi dengan jq
+- Mencakup 4 fitur payment utama:
+  - **Provider endpoints** - List semua payment providers
+  - **QRIS payment** - QR code payment testing
+  - **Virtual Account** - Bank VA payment testing
+  - **E-Wallet** - OVO, DANA, GoPay top-up testing
+  - **E-Money** - LinkAja, Mandiri e-Money testing
+
+**Cara menjalankan:**
+
+Windows:
+```cmd
+.\test_payment_features.bat
+```
+
+Linux/Mac:
+```bash
+chmod +x test_payment_features.sh
+./test_payment_features.sh
+```
+
+**Output:**
+- ✅ Sukses: Response JSON ditampilkan
+- ❌ Error: Pesan error ditampilkan dengan jelas
+- ⏱️ Processing time ditampilkan di setiap test
+
+**API Response Format
 
 Success:
 ```json

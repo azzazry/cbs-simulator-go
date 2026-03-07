@@ -135,12 +135,12 @@ CREATE TABLE IF NOT EXISTS bill_payments (
 );
 
 -- Create Indexes for Performance
-CREATE INDEX idx_customers_cif ON customers(cif);
-CREATE INDEX idx_accounts_cif ON accounts(cif);
-CREATE INDEX idx_accounts_number ON accounts(account_number);
-CREATE INDEX idx_transactions_from ON transactions(from_account_number);
-CREATE INDEX idx_transactions_to ON transactions(to_account_number);
-CREATE INDEX idx_transactions_date ON transactions(transaction_date);
-CREATE INDEX idx_cards_cif ON cards(cif);
-CREATE INDEX idx_loans_cif ON loans(cif);
-CREATE INDEX idx_deposits_cif ON deposits(cif);
+CREATE INDEX IF NOT EXISTS idx_customers_cif ON customers(cif);
+CREATE INDEX IF NOT EXISTS idx_accounts_cif ON accounts(cif);
+CREATE INDEX IF NOT EXISTS idx_accounts_number ON accounts(account_number);
+CREATE INDEX IF NOT EXISTS idx_transactions_from ON transactions(from_account_number);
+CREATE INDEX IF NOT EXISTS idx_transactions_to ON transactions(to_account_number);
+CREATE INDEX IF NOT EXISTS idx_transactions_date ON transactions(transaction_date);
+CREATE INDEX IF NOT EXISTS idx_cards_cif ON cards(cif);
+CREATE INDEX IF NOT EXISTS idx_loans_cif ON loans(cif);
+CREATE INDEX IF NOT EXISTS idx_deposits_cif ON deposits(cif);
