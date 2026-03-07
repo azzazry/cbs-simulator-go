@@ -5,6 +5,9 @@
 http://localhost:8080/api/v1
 ```
 
+> **Security:** Semua endpoint kecuali login, register, dan health check membutuhkan JWT token.
+> Lihat [API_SECURITY.md](API_SECURITY.md) untuk dokumentasi lengkap fitur keamanan.
+
 ## Response Format
 
 All endpoints return JSON with consistent format:
@@ -29,8 +32,13 @@ All endpoints return JSON with consistent format:
 
 ## Authentication
 
+Semua protected endpoint membutuhkan header:
+```
+Authorization: Bearer <access_token>
+```
+
 ### Login
-Authenticate customer with CIF and PIN.
+Authenticate customer with CIF and PIN. Returns JWT token pair.
 
 **Endpoint:** `POST /auth/login`
 
@@ -49,16 +57,26 @@ Authenticate customer with CIF and PIN.
   "data": {
     "cif": "CIF001",
     "full_name": "Budi Santoso",
+    "role": "admin",
     "message": "Login successful",
-    "token": "token_CIF001"
+    "access_token": "eyJhbGciOiJIUzI1NiIs...",
+    "refresh_token": "eyJhbGciOiJIUzI1NiIs...",
+    "expires_in": 900,
+    "token_type": "Bearer"
   }
 }
 ```
 
+**Error Responses:**
+- 401: Invalid CIF or PIN
+- 401: Account locked (3x gagal login). Lihat [Self-Service Unlock](API_SECURITY.md#step-1-verifikasi-e-kyc-ktp)
+
 ### Register
-Create a new customer account.
+Create a new customer account with PIN policy enforcement.
 
 **Endpoint:** `POST /auth/register`
+
+**PIN Policy:** 6 digit, tidak boleh berurutan (123456), tidak boleh angka sama semua (111111).
 
 **Request Body:**
 ```json
@@ -70,7 +88,7 @@ Create a new customer account.
   "email": "john.doe@email.com",
   "address": "Jl. Merdeka No. 100, Jakarta",
   "date_of_birth": "1993-06-15",
-  "pin": "123456"
+  "pin": "246813"
 }
 ```
 
@@ -86,18 +104,16 @@ Create a new customer account.
 }
 ```
 
-**Error Response (CIF already exists):**
-```json
-{
-  "status": "error",
-  "message": "CIF already exists"
-}
-```
+**Error Responses:**
+- 400: CIF already exists
+- 400: PIN policy violation
 
 ### Change PIN
-Change customer PIN.
+Change customer PIN (requires authentication).
 
 **Endpoint:** `POST /auth/change-pin`
+
+**Headers:** `Authorization: Bearer <access_token>`
 
 **Request Body:**
 ```json
@@ -108,14 +124,58 @@ Change customer PIN.
 }
 ```
 
+**Error Responses:**
+- 400: Incorrect old PIN
+- 400: PIN policy violation (new PIN)
+
+### Logout
+Invalidate current JWT token.
+
+**Endpoint:** `POST /auth/logout`
+
+**Headers:** `Authorization: Bearer <access_token>`
+
+**Success Response:**
+```json
+{
+  "status": "success",
+  "message": "Logged out successfully"
+}
+```
+
+### Refresh Token
+Generate new token pair from refresh token.
+
+**Endpoint:** `POST /auth/refresh`
+
+**Request Body:**
+```json
+{
+  "refresh_token": "eyJhbGciOiJIUzI1NiIs..."
+}
+```
+
+### Get Profile
+Get authenticated user profile and roles.
+
+**Endpoint:** `GET /auth/profile`
+
+**Headers:** `Authorization: Bearer <access_token>`
+
+> **More security endpoints:** Lihat [API_SECURITY.md](API_SECURITY.md) untuk e-KYC, OTP, unlock, dan reset PIN.
+
 ---
 
 ## Customer Profile
+
+> **🔒 Semua endpoint di bawah membutuhkan:** `Authorization: Bearer <access_token>`
 
 ### Get Customer Profile
 Get customer information.
 
 **Endpoint:** `GET /customers/:cif`
+
+**Headers:** `Authorization: Bearer <access_token>`
 
 **Example:** `GET /customers/CIF001`
 
@@ -733,9 +793,12 @@ Update user notification settings.
 | HTTP Status | Description |
 |-------------|-------------|
 | 200 | Success |
+| 201 | Created - Resource created successfully |
 | 400 | Bad Request - Invalid input or business logic error |
-| 401 | Unauthorized - Invalid credentials |
+| 401 | Unauthorized - Missing/invalid/expired JWT token |
+| 403 | Forbidden - Insufficient role permissions (RBAC) |
 | 404 | Not Found - Resource not found |
+| 429 | Too Many Requests - Rate limit exceeded (60 req/min) |
 | 500 | Internal Server Error |
 
 ---
@@ -748,19 +811,29 @@ Update user notification settings.
 # 1. Health Check
 curl http://localhost:8080/health
 
-# 2. Login
+# 2. Login (simpan access_token dari response)
 curl -X POST http://localhost:8080/api/v1/auth/login \
   -H "Content-Type: application/json" \
   -d '{"cif": "CIF001", "pin": "123456"}'
 
-# 3. Get Accounts
-curl http://localhost:8080/api/v1/customers/CIF001/accounts
+# Set token (ganti dengan access_token dari response login)
+export TOKEN="eyJhbGci..."
 
-# 4. Check Balance
-curl http://localhost:8080/api/v1/accounts/1001234567
+# 3. Get Profile
+curl http://localhost:8080/api/v1/auth/profile \
+  -H "Authorization: Bearer $TOKEN"
 
-# 5. Transfer Money
+# 4. Get Accounts
+curl http://localhost:8080/api/v1/customers/CIF001/accounts \
+  -H "Authorization: Bearer $TOKEN"
+
+# 5. Check Balance
+curl http://localhost:8080/api/v1/accounts/1001234567 \
+  -H "Authorization: Bearer $TOKEN"
+
+# 6. Transfer Money
 curl -X POST http://localhost:8080/api/v1/transfers/intra \
+  -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
     "from_account_number": "1001234567",
@@ -769,29 +842,37 @@ curl -X POST http://localhost:8080/api/v1/transfers/intra \
     "description": "Test transfer"
   }'
 
-# 6. Check Statement
-curl "http://localhost:8080/api/v1/accounts/1001234567/statement?limit=5"
-
-# 7. Get Bills
-curl "http://localhost:8080/api/v1/bills/inquiry?biller_code=PLN&customer_number=123456789012"
+# 7. Check Statement
+curl "http://localhost:8080/api/v1/accounts/1001234567/statement?limit=5" \
+  -H "Authorization: Bearer $TOKEN"
 
 # 8. Pay Bill
 curl -X POST http://localhost:8080/api/v1/bills/pay \
+  -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
     "account_number": "1001234567",
     "bill_number": "BILL202603001"
   }'
+
+# 9. Logout
+curl -X POST http://localhost:8080/api/v1/auth/logout \
+  -H "Authorization: Bearer $TOKEN"
 ```
 
 ---
 
 ## Admin Management APIs
 
+> **🔒 Admin endpoints membutuhkan role `admin` atau `supervisor`.**
+> Lihat [API_SECURITY.md](API_SECURITY.md) untuk endpoint keamanan admin (audit logs, roles, transaction limits).
+
 ### Get All Supported Banks
 Get list of all supported banks for transfers.
 
 **Endpoint:** `GET /admin/banks`
+
+**Headers:** `Authorization: Bearer <admin_token>`
 
 **Response:**
 ```json
@@ -1021,4 +1102,8 @@ Import this JSON to Postman for quick testing:
 
 ---
 
-**Last Updated:** March 2026
+## Related Documentation
+
+- [API_SECURITY.md](API_SECURITY.md) — Security endpoints (JWT, OTP, e-KYC, RBAC, audit)
+
+**Last Updated:** March 2026 (Phase 1 Security Update)

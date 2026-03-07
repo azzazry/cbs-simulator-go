@@ -65,8 +65,9 @@ tmp/
 temp/
 *.tmp
 
-# Markdowns Hide
+# Markdowns
 *.md
 !API.md
+!API_SECURITY.md
 !BANKING_FEES.md
 !README.md

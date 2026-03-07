@@ -1,149 +1,142 @@
 package routes
 
 import (
+	"time"
+
 	"cbs-simulator/api/handlers"
 	"cbs-simulator/api/middleware"
+	"cbs-simulator/config"
 
 	"github.com/gin-gonic/gin"
 )
 
-// SetupRoutes configures all API routes
+// SetupRoutes configures all API routes and middleware
 func SetupRoutes(router *gin.Engine) {
-	// Apply middleware
-	router.Use(middleware.CORS())
-	router.Use(middleware.Logger())
-	
+	// Global middleware
+	router.Use(middleware.CORSMiddleware())
+	router.Use(middleware.LoggerMiddleware())
+
+	// Rate limiting (global)
+	rateLimit := config.AppConfig.RateLimitPerMinute
+	if rateLimit <= 0 {
+		rateLimit = 60
+	}
+	router.Use(middleware.RateLimiterMiddleware(rateLimit, time.Minute))
+
 	// Health check
 	router.GET("/health", func(c *gin.Context) {
-		c.JSON(200, gin.H{
-			"status":  "healthy",
-			"service": "CBS Simulator",
-			"version": "1.0.0",
-		})
+		c.JSON(200, gin.H{"status": "ok", "service": "CBS Simulator"})
 	})
-	
-	// API v1 group
+
+	// API v1
 	v1 := router.Group("/api/v1")
+
+	// === Public routes (no auth required) ===
+	auth := v1.Group("/auth")
 	{
-		// Authentication routes
-		auth := v1.Group("/auth")
+		auth.POST("/login", handlers.Login)
+		auth.POST("/register", handlers.Register)
+
+		// Self-service unlock flow (no auth needed - user is locked out)
+		auth.POST("/otp/request", handlers.RequestOTP)
+		auth.POST("/otp/verify", handlers.VerifyOTPHandler)
+		auth.POST("/ekyc/verify", handlers.VerifyEKYC)
+		auth.POST("/unlock", handlers.UnlockAccount)
+		auth.POST("/reset-pin", handlers.ResetPINHandler)
+	}
+
+	// === Protected routes (JWT auth required) ===
+	protected := v1.Group("")
+	protected.Use(middleware.AuthMiddleware())
+	protected.Use(middleware.AuditMiddleware())
+	{
+		// Auth (authenticated)
+		protectedAuth := protected.Group("/auth")
 		{
-			auth.POST("/login", handlers.Login)
-			auth.POST("/register", handlers.Register)
-			auth.POST("/change-pin", handlers.ChangePIN)
+			protectedAuth.POST("/logout", handlers.Logout)
+			protectedAuth.POST("/refresh", handlers.RefreshToken)
+			protectedAuth.POST("/change-pin", handlers.ChangePIN)
+			protectedAuth.GET("/profile", handlers.GetProfile)
 		}
-		
-		// Customer routes
-		customer := v1.Group("/customers")
+
+		// Customer management
+		customer := protected.Group("/customers")
 		{
-			customer.GET("/:cif", handlers.GetProfile)
+			customer.GET("/:cif", handlers.GetAccountsByCIF)
 			customer.GET("/:cif/accounts", handlers.GetAccountsByCIF)
-			customer.GET("/:cif/cards", handlers.GetCardsByCIF)
-			customer.GET("/:cif/loans", handlers.GetLoansByCIF)
-			customer.GET("/:cif/deposits", handlers.GetDepositsByCIF)
 		}
-		
-		// Account routes
-		accounts := v1.Group("/accounts")
+
+		// Account operations
+		accounts := protected.Group("/accounts")
 		{
 			accounts.GET("/:account_number", handlers.GetAccountBalance)
-			accounts.GET("/:account_number/statement", handlers.GetAccountStatement)
+			accounts.GET("/:account_number/transactions", handlers.GetAccountStatement)
+			accounts.GET("/:account_number/balance", handlers.GetAccountBalance)
 		}
-		
-		// Transfer routes
-		transfers := v1.Group("/transfers")
+
+		// Transfer operations
+		transfers := protected.Group("/transfers")
 		{
 			transfers.POST("/intra", handlers.IntraBankTransfer)
 			transfers.POST("/inter", handlers.InterBankTransfer)
-			transfers.GET("/:transaction_id", handlers.GetTransaction)
+			transfers.GET("/fees", handlers.GetTransferFees)
 		}
-		
-		// Bill payment routes
-		bills := v1.Group("/bills")
+
+		// Bill Payment
+		bills := protected.Group("/bills")
 		{
-			bills.GET("/billers", handlers.GetBillerList)
-			bills.GET("/inquiry", handlers.InquiryBill)
 			bills.POST("/pay", handlers.PayBill)
-			bills.GET("/all", handlers.GetAllBills) // For testing
+			bills.GET("/history", handlers.GetAllBills)
 		}
-		
-		// Card routes
-		cards := v1.Group("/cards")
+
+		// Card operations
+		cards := protected.Group("/cards")
 		{
-			cards.GET("/:card_number", handlers.GetCardDetails)
+			cards.GET("/:cif", handlers.GetCardsByCIF)
 			cards.POST("/block", handlers.BlockCard)
 			cards.POST("/unblock", handlers.UnblockCard)
 		}
-		
-		// Loan routes
-		loans := v1.Group("/loans")
+
+		// Loan operations
+		loans := protected.Group("/loans")
 		{
-			loans.GET("/:loan_number", handlers.GetLoanDetails)
+			loans.GET("/:cif", handlers.GetLoansByCIF)
+			loans.GET("/detail/:loan_number", handlers.GetLoanDetails)
 		}
-		
-		// Deposit routes
-		deposits := v1.Group("/deposits")
+
+		// Deposit operations
+		deposits := protected.Group("/deposits")
 		{
-			deposits.GET("/:deposit_number", handlers.GetDepositDetails)
+			deposits.GET("/:cif", handlers.GetDepositsByCIF)
+			deposits.GET("/detail/:deposit_number", handlers.GetDepositDetails)
 		}
-		
-		// Notification routes
-		notifications := v1.Group("/notifications")
+
+		// Notification operations
+		notifications := protected.Group("/notifications")
 		{
 			notifications.GET("/:cif", handlers.GetNotifications)
-			notifications.GET("/:cif/count", handlers.GetNotificationCount)
 			notifications.POST("/read", handlers.MarkNotificationAsRead)
-			notifications.POST("/fcm-token", handlers.RegisterFCMToken)
-			notifications.GET("/:cif/preferences", handlers.GetNotificationPreferences)
-			notifications.PUT("/:cif/preferences", handlers.UpdateNotificationPreferences)
 		}
-		
-		// Payment routes (QRIS, VA, E-Wallet, E-Money)
-		payments := v1.Group("/payments")
+
+		// Payment operations (QRIS, VA, E-Wallet, E-Money)
+		payments := protected.Group("/payments")
 		{
-			// QRIS Payment
 			payments.POST("/qris", handlers.ProcessQRISPayment)
-			
-			// Virtual Account Payment
 			payments.POST("/va", handlers.ProcessVAPayment)
-			
-			// E-Wallet Top-up
 			payments.POST("/ewallet/topup", handlers.ProcessEWalletTopup)
-			payments.GET("/ewallet/providers", handlers.GetEWalletProviders)
-			
-			// E-Money Top-up
 			payments.POST("/emoney/topup", handlers.ProcessEMoneyTopup)
-			payments.GET("/emoney/providers", handlers.GetEMoneyProviders)
-			
-			// VA Information
-			payments.GET("/va/providers", handlers.GetVAProviders)
 		}
-	}
-	
-	// Admin routes (unprotected for testing; add auth middleware in production)
-	admin := router.Group("/api/v1/admin")
-	{
-		// Bank management routes
-		banks := admin.Group("/banks")
+
+		// === Admin routes (require admin role) ===
+		admin := protected.Group("/admin")
+		admin.Use(middleware.RequireRole("admin", "supervisor"))
 		{
-			banks.GET("", handlers.GetAllBanks)
-		}
-		
-		// Fee management routes
-		fees := admin.Group("/fees")
-		{
-			// Transfer fees
-			fees.GET("/transfer", handlers.GetTransferFees)
-			fees.PUT("/transfer", handlers.UpdateTransferFee)
-			fees.POST("/transfer/calculate", handlers.CalculateTransferFeeHandler)
-			
-			// Service fees (e-wallet, e-money, VA, QRIS, etc)
-			fees.GET("/services", handlers.GetServiceFees)
-			fees.PUT("/services", handlers.UpdateServiceFee)
-			fees.POST("/services/calculate", handlers.CalculateServiceFeeHandler)
-			
-			// Statistics
-			fees.GET("/statistics", handlers.GetFeeStatistics)
+			admin.GET("/audit-logs", handlers.GetAuditLogs)
+			admin.GET("/transaction-limits", handlers.GetTransactionLimits)
+			admin.PUT("/transaction-limits", handlers.UpdateTransactionLimit)
+			admin.GET("/roles", handlers.GetUserRolesHandler)
+			admin.POST("/roles/assign", handlers.AssignRoleHandler)
+			admin.POST("/unlock-account", handlers.AdminUnlockAccount)
 		}
 	}
 }

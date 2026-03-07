@@ -217,3 +217,96 @@ type ServiceFee struct {
 	CreatedAt     time.Time  `json:"created_at" db:"created_at"`
 	UpdatedAt     time.Time  `json:"updated_at" db:"updated_at"`
 }
+
+// ==================== SECURITY MODELS ====================
+
+// TokenBlacklist represents revoked JWT tokens
+type TokenBlacklist struct {
+	ID            int       `json:"id" db:"id"`
+	TokenJTI      string    `json:"token_jti" db:"token_jti"`
+	CIF           string    `json:"cif" db:"cif"`
+	ExpiresAt     time.Time `json:"expires_at" db:"expires_at"`
+	BlacklistedAt time.Time `json:"blacklisted_at" db:"blacklisted_at"`
+}
+
+// Role represents system roles (customer, teller, admin, supervisor)
+type Role struct {
+	ID          int       `json:"id" db:"id"`
+	RoleName    string    `json:"role_name" db:"role_name"`
+	Description string    `json:"description" db:"description"`
+	IsActive    int       `json:"is_active" db:"is_active"`
+	CreatedAt   time.Time `json:"created_at" db:"created_at"`
+}
+
+// UserRole represents the assignment of roles to users
+type UserRole struct {
+	ID         int       `json:"id" db:"id"`
+	CIF        string    `json:"cif" db:"cif"`
+	RoleID     int       `json:"role_id" db:"role_id"`
+	AssignedBy string    `json:"assigned_by" db:"assigned_by"`
+	AssignedAt time.Time `json:"assigned_at" db:"assigned_at"`
+}
+
+// AuditLog represents immutable activity logs
+type AuditLog struct {
+	ID             int       `json:"id" db:"id"`
+	CIF            string    `json:"cif" db:"cif"`
+	Action         string    `json:"action" db:"action"`
+	Resource       string    `json:"resource" db:"resource"`
+	ResourceID     string    `json:"resource_id" db:"resource_id"`
+	IPAddress      string    `json:"ip_address" db:"ip_address"`
+	UserAgent      string    `json:"user_agent" db:"user_agent"`
+	RequestMethod  string    `json:"request_method" db:"request_method"`
+	RequestPath    string    `json:"request_path" db:"request_path"`
+	RequestBody    string    `json:"request_body,omitempty" db:"request_body"`
+	ResponseStatus int       `json:"response_status" db:"response_status"`
+	Details        string    `json:"details" db:"details"`
+	CreatedAt      time.Time `json:"created_at" db:"created_at"`
+}
+
+// TransactionLimit represents per-role transaction limits
+type TransactionLimit struct {
+	ID                  int       `json:"id" db:"id"`
+	RoleName            string    `json:"role_name" db:"role_name"`
+	TransactionType     string    `json:"transaction_type" db:"transaction_type"`
+	DailyLimit          float64   `json:"daily_limit" db:"daily_limit"`
+	PerTransactionLimit float64   `json:"per_transaction_limit" db:"per_transaction_limit"`
+	MonthlyLimit        float64   `json:"monthly_limit" db:"monthly_limit"`
+	IsActive            int       `json:"is_active" db:"is_active"`
+	CreatedAt           time.Time `json:"created_at" db:"created_at"`
+	UpdatedAt           time.Time `json:"updated_at" db:"updated_at"`
+}
+
+// LoginAttempt represents login attempt tracking for lockout
+type LoginAttempt struct {
+	ID          int       `json:"id" db:"id"`
+	CIF         string    `json:"cif" db:"cif"`
+	IPAddress   string    `json:"ip_address" db:"ip_address"`
+	AttemptType string    `json:"attempt_type" db:"attempt_type"`
+	IsSuccess   int       `json:"is_success" db:"is_success"`
+	AttemptedAt time.Time `json:"attempted_at" db:"attempted_at"`
+}
+
+// OTPCode represents OTP codes for MFA and account unlock
+type OTPCode struct {
+	ID        int       `json:"id" db:"id"`
+	CIF       string    `json:"cif" db:"cif"`
+	OTPCode   string    `json:"otp_code,omitempty" db:"otp_code"`
+	OTPType   string    `json:"otp_type" db:"otp_type"` // login_mfa, unlock_account, reset_pin
+	Channel   string    `json:"channel" db:"channel"`   // sms, email
+	IsUsed    int       `json:"is_used" db:"is_used"`
+	ExpiresAt time.Time `json:"expires_at" db:"expires_at"`
+	CreatedAt time.Time `json:"created_at" db:"created_at"`
+}
+
+// EKYCVerification represents e-KYC verification for self-service unlock
+type EKYCVerification struct {
+	ID                 int        `json:"id" db:"id"`
+	VerificationID     string     `json:"verification_id" db:"verification_id"`
+	CIF                string     `json:"cif" db:"cif"`
+	IDCardNumber       string     `json:"id_card_number" db:"id_card_number"`
+	VerificationType   string     `json:"verification_type" db:"verification_type"`     // unlock_account, reset_pin
+	VerificationStatus string     `json:"verification_status" db:"verification_status"` // pending, verified, rejected
+	VerifiedAt         *time.Time `json:"verified_at" db:"verified_at"`
+	CreatedAt          time.Time  `json:"created_at" db:"created_at"`
+}

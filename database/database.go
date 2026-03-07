@@ -61,6 +61,7 @@ func runMigrations() error {
 		"./database/migrations/002_add_notifications.sql",
 		"./database/migrations/003_add_banks.sql",
 		"./database/migrations/004_add_transfer_fees.sql",
+		"./database/migrations/005_add_security_tables.sql",
 	}
 
 	for _, migrationFile := range migrationFiles {
@@ -80,15 +81,21 @@ func runMigrations() error {
 
 // runSeeders executes all SQL seeder files
 func runSeeders() error {
-	seederFile := "./database/seeders/001_sample_data.sql"
-
-	sqlBytes, err := os.ReadFile(seederFile)
-	if err != nil {
-		return fmt.Errorf("failed to read seeder file: %v", err)
+	seederFiles := []string{
+		"./database/seeders/001_sample_data.sql",
+		"./database/seeders/005_security_seed.sql",
 	}
 
-	if _, err := DB.Exec(string(sqlBytes)); err != nil {
-		return fmt.Errorf("failed to execute seeder: %v", err)
+	for _, seederFile := range seederFiles {
+		sqlBytes, err := os.ReadFile(seederFile)
+		if err != nil {
+			log.Printf("Warning: seeder file not found: %s", seederFile)
+			continue
+		}
+
+		if _, err := DB.Exec(string(sqlBytes)); err != nil {
+			return fmt.Errorf("failed to execute seeder %s: %v", seederFile, err)
+		}
 	}
 
 	log.Println("Seeders completed successfully")
