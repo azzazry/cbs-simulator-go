@@ -98,15 +98,7 @@ func UpdateTransferFee(c *gin.Context) {
 func GetServiceFees(c *gin.Context) {
 	serviceType := c.Query("type") // Optional filter by service type
 
-	var fees interface{}
-	var err error
-
-	if serviceType != "" {
-		fees, err = services.GetServiceFeesByType(serviceType)
-	} else {
-		fees, err = services.GetAllServiceFees()
-	}
-
+	fees, err := services.GetAllServiceFees(serviceType)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -262,7 +254,7 @@ func GetFeeStatistics(c *gin.Context) {
 	_ = c.Query("service_type")
 
 	if feeType == "service" {
-		fees, err := services.GetAllServiceFees()
+		fees, err := services.GetAllServiceFees("")
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return

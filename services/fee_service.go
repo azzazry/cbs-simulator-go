@@ -3,6 +3,7 @@ package services
 import (
 	"cbs-simulator/database"
 	"cbs-simulator/models"
+	"database/sql"
 	"fmt"
 	"time"
 )
@@ -192,26 +193,42 @@ func GetServiceFee(serviceCode string) (*models.ServiceFee, error) {
 }
 
 // GetAllServiceFees retrieves all service fees
-func GetAllServiceFees() ([]models.ServiceFee, error) {
+func GetAllServiceFees(serviceType string) ([]models.ServiceFee, error) {
 	query := `SELECT id, service_code, service_name, service_type, fee_type, fee_amount, 
 	          fee_percentage, minimum_amount, maximum_amount, is_active, effective_from, 
 	          effective_to, notes, created_at, updated_at
 	          FROM service_fees 
-	          WHERE is_active = 1
-	          ORDER BY service_type, service_code`
+	          WHERE is_active = 1`
 
-	rows, err := database.DB.Query(query)
+	if serviceType != "" {
+		query += ` AND service_type = ?`
+	}
+
+	query += ` ORDER BY service_type, service_code`
+
+	var rows interface{}
+	var err error
+
+	if serviceType != "" {
+		rows, err = database.DB.Query(query, serviceType)
+	} else {
+		rows, err = database.DB.Query(query)
+	}
+
 	if err != nil {
 		return nil, fmt.Errorf("failed to query service fees: %w", err)
 	}
-	defer rows.Close()
+
+	// Cast to *sql.Rows type
+	sqlRows := rows.(*sql.Rows)
+	defer sqlRows.Close()
 
 	var fees []models.ServiceFee
-	for rows.Next() {
+	for sqlRows.Next() {
 		var fee models.ServiceFee
 		var effectiveTo *time.Time
 
-		err := rows.Scan(
+		err := sqlRows.Scan(
 			&fee.ID, &fee.ServiceCode, &fee.ServiceName, &fee.ServiceType, &fee.FeeType,
 			&fee.FeeAmount, &fee.FeePercentage, &fee.MinimumAmount, &fee.MaximumAmount,
 			&fee.IsActive, &fee.EffectiveFrom, &effectiveTo, &fee.Notes,

@@ -97,6 +97,27 @@ func SetupRoutes(router *gin.Engine) {
 			notifications.GET("/:cif/preferences", handlers.GetNotificationPreferences)
 			notifications.PUT("/:cif/preferences", handlers.UpdateNotificationPreferences)
 		}
+		
+		// Payment routes (QRIS, VA, E-Wallet, E-Money)
+		payments := v1.Group("/payments")
+		{
+			// QRIS Payment
+			payments.POST("/qris", handlers.ProcessQRISPayment)
+			
+			// Virtual Account Payment
+			payments.POST("/va", handlers.ProcessVAPayment)
+			
+			// E-Wallet Top-up
+			payments.POST("/ewallet/topup", handlers.ProcessEWalletTopup)
+			payments.GET("/ewallet/providers", handlers.GetEWalletProviders)
+			
+			// E-Money Top-up
+			payments.POST("/emoney/topup", handlers.ProcessEMoneyTopup)
+			payments.GET("/emoney/providers", handlers.GetEMoneyProviders)
+			
+			// VA Information
+			payments.GET("/va/providers", handlers.GetVAProviders)
+		}
 	}
 	
 	// Admin routes (unprotected for testing; add auth middleware in production)

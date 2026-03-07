@@ -68,4 +68,5 @@ temp/
 # Markdowns Hide
 *.md
 !API.md
+!BANKING_FEES.md
 !README.md

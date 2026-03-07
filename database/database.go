@@ -56,15 +56,22 @@ func InitDB() error {
 
 // runMigrations executes all SQL migration files
 func runMigrations() error {
-	migrationFile := "./database/migrations/001_init_schema.sql"
-
-	sqlBytes, err := os.ReadFile(migrationFile)
-	if err != nil {
-		return fmt.Errorf("failed to read migration file: %v", err)
+	migrationFiles := []string{
+		"./database/migrations/001_init_schema.sql",
+		"./database/migrations/002_add_notifications.sql",
+		"./database/migrations/003_add_banks.sql",
+		"./database/migrations/004_add_transfer_fees.sql",
 	}
 
-	if _, err := DB.Exec(string(sqlBytes)); err != nil {
-		return fmt.Errorf("failed to execute migration: %v", err)
+	for _, migrationFile := range migrationFiles {
+		sqlBytes, err := os.ReadFile(migrationFile)
+		if err != nil {
+			return fmt.Errorf("failed to read migration file %s: %v", migrationFile, err)
+		}
+
+		if _, err := DB.Exec(string(sqlBytes)); err != nil {
+			return fmt.Errorf("failed to execute migration %s: %v", migrationFile, err)
+		}
 	}
 
 	log.Println("Migrations completed successfully")
