@@ -84,8 +84,8 @@ func runMigrations() error {
 func runSeeders() error {
 	seederFiles := []string{
 		"./database/seeders/001_sample_data.sql",
-		"./database/seeders/005_security_seed.sql",
-		"./database/seeders/006_core_banking_seed.sql",
+		"./database/seeders/004_security_seed.sql",
+		"./database/seeders/005_core_banking_seed.sql",
 	}
 
 	for _, seederFile := range seederFiles {

@@ -177,7 +177,7 @@ func GetStandingInstructions(c *gin.Context) {
 }
 
 func PauseStandingInstruction(c *gin.Context) {
-	si := c.Param("si")
+	si := c.Param("id")
 	if err := services.PauseSI(si); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "message": err.Error()})
 		return
@@ -186,7 +186,7 @@ func PauseStandingInstruction(c *gin.Context) {
 }
 
 func CancelStandingInstruction(c *gin.Context) {
-	si := c.Param("si")
+	si := c.Param("id")
 	if err := services.CancelSI(si); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "message": err.Error()})
 		return
@@ -195,7 +195,7 @@ func CancelStandingInstruction(c *gin.Context) {
 }
 
 func GetSIHistory(c *gin.Context) {
-	si := c.Param("si")
+	si := c.Param("id")
 	history, err := services.GetSIExecutionHistory(si)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": err.Error()})

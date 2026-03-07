@@ -155,10 +155,10 @@ func SetupRoutes(router *gin.Engine) {
 		si := protected.Group("/standing-instructions")
 		{
 			si.POST("", handlers.CreateStandingInstruction)
-			si.GET("/:cif", handlers.GetStandingInstructions)
-			si.PUT("/:si/pause", handlers.PauseStandingInstruction)
-			si.DELETE("/:si", handlers.CancelStandingInstruction)
-			si.GET("/:si/history", handlers.GetSIHistory)
+			si.GET("/by-cif/:cif", handlers.GetStandingInstructions)
+			si.PUT("/:id/pause", handlers.PauseStandingInstruction)
+			si.DELETE("/:id", handlers.CancelStandingInstruction)
+			si.GET("/:id/history", handlers.GetSIHistory)
 		}
 
 		// Account Management
