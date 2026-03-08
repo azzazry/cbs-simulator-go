@@ -13,6 +13,7 @@ import (
 )
 
 func main() {
+
 	// Load configuration
 	config.LoadConfig()
 
@@ -32,20 +33,19 @@ func main() {
 		gin.SetMode(gin.DebugMode)
 	}
 
-	// Create Gin router
+	// Create router
 	router := gin.Default()
 
 	// Setup routes
 	routes.SetupRoutes(router)
 
-	// Start server
-	log.Println("")
+	// Server address
 	addr := fmt.Sprintf("0.0.0.0:%s", config.AppConfig.ServerPort)
 
-	log.Printf("CBS Simulator starting on %s", addr)
-	log.Printf("Environment: %s", config.AppConfig.Environment)
-	log.Printf("Database: %s", config.AppConfig.DatabasePath)
+	// Show startup screen
+	utils.StartupScreen(addr)
 
+	// Start server
 	if err := router.Run(addr); err != nil {
 		log.Fatalf("Failed to start server: %v", err)
 	}
