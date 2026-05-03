@@ -10,10 +10,9 @@ import (
 
 // CalculateDailyInterest calculates and records daily interest for an account
 func CalculateDailyInterest(accountNumber, accrualDate string) (*models.InterestAccrual, error) {
-	// Get account balance
 	var balance float64
 	var accountType string
-	err := database.DB.QueryRow(`SELECT balance, account_type FROM accounts WHERE account_number = ? AND status = 'active'`,
+	err := database.DB.QueryRow(`SELECT balance, account_type FROM accounts WHERE account_number = $1 AND status = 'active'`,
 		accountNumber).Scan(&balance, &accountType)
 	if err != nil {
 		return nil, fmt.Errorf("account not found or inactive")
@@ -23,7 +22,6 @@ func CalculateDailyInterest(accountNumber, accrualDate string) (*models.Interest
 		return nil, fmt.Errorf("no positive balance for interest calculation")
 	}
 
-	// Get applicable interest rate (tiered for savings)
 	productType := "savings"
 	if accountType == "giro" || accountType == "checking" {
 		productType = "checking"
@@ -34,22 +32,27 @@ func CalculateDailyInterest(accountNumber, accrualDate string) (*models.Interest
 		return nil, fmt.Errorf("no applicable interest rate: %v", err)
 	}
 
-	// Calculate daily interest: (balance * rate% / 365)
 	dailyInterest := math.Round((balance*rate/100/365)*10000) / 10000
 
-	// Get accrued interest for this month so far
+	// Hitung bulan berjalan menggunakan date range (PostgreSQL tidak support LIKE pada DATE)
 	monthStart := accrualDate[:8] + "01"
 	var existingAccrued float64
-	database.DB.QueryRow(`SELECT COALESCE(SUM(daily_interest), 0) FROM interest_accruals 
-	                      WHERE account_number = ? AND accrual_date >= ? AND accrual_date < ?`,
+	database.DB.QueryRow(`SELECT COALESCE(SUM(daily_interest), 0) FROM interest_accruals
+	                      WHERE account_number = $1 AND accrual_date >= $2 AND accrual_date < $3`,
 		accountNumber, monthStart, accrualDate).Scan(&existingAccrued)
 
 	accruedInterest := existingAccrued + dailyInterest
 
-	// Insert accrual record
-	_, err = database.DB.Exec(`INSERT OR REPLACE INTO interest_accruals 
+	// INSERT ON CONFLICT menggantikan INSERT OR REPLACE dari SQLite
+	_, err = database.DB.Exec(`INSERT INTO interest_accruals
 	                           (account_number, accrual_date, product_type, balance, rate, daily_interest, accrued_interest)
-	                           VALUES (?, ?, ?, ?, ?, ?, ?)`,
+	                           VALUES ($1, $2, $3, $4, $5, $6, $7)
+	                           ON CONFLICT (account_number, accrual_date) DO UPDATE
+	                           SET product_type = EXCLUDED.product_type,
+	                               balance = EXCLUDED.balance,
+	                               rate = EXCLUDED.rate,
+	                               daily_interest = EXCLUDED.daily_interest,
+	                               accrued_interest = EXCLUDED.accrued_interest`,
 		accountNumber, accrualDate, productType, balance, rate, dailyInterest, accruedInterest)
 	if err != nil {
 		return nil, fmt.Errorf("failed to record accrual: %v", err)
@@ -72,15 +75,14 @@ func GetApplicableRate(productType string, balance float64, tenorMonths int) (fl
 	var args []interface{}
 
 	if productType == "deposit" {
-		query = `SELECT base_rate FROM interest_rates 
-		         WHERE product_type = ? AND is_active = 1 AND tenor_months = ?
+		query = `SELECT base_rate FROM interest_rates
+		         WHERE product_type = $1 AND is_active = TRUE AND tenor_months = $2
 		         ORDER BY effective_date DESC LIMIT 1`
 		args = []interface{}{productType, tenorMonths}
 	} else {
-		// Tiered rates for savings/checking
-		query = `SELECT base_rate FROM interest_rates 
-		         WHERE product_type = ? AND is_active = 1 
-		         AND min_balance <= ? AND (max_balance IS NULL OR max_balance >= ?)
+		query = `SELECT base_rate FROM interest_rates
+		         WHERE product_type = $1 AND is_active = TRUE
+		         AND min_balance <= $2 AND (max_balance IS NULL OR max_balance >= $3)
 		         ORDER BY effective_date DESC, min_balance DESC LIMIT 1`
 		args = []interface{}{productType, balance, balance}
 	}
@@ -96,7 +98,7 @@ func GetApplicableRate(productType string, balance float64, tenorMonths int) (fl
 
 // AccrueInterestForAllAccounts runs daily interest accrual for all active savings accounts
 func AccrueInterestForAllAccounts(date string) (int, int, error) {
-	rows, err := database.DB.Query(`SELECT account_number FROM accounts WHERE status = 'active' AND balance > 0 
+	rows, err := database.DB.Query(`SELECT account_number FROM accounts WHERE status = 'active' AND balance > 0
 	                                 AND account_type IN ('savings', 'checking', 'giro', 'tabungan')`)
 	if err != nil {
 		return 0, 0, err
@@ -121,13 +123,16 @@ func AccrueInterestForAllAccounts(date string) (int, int, error) {
 
 // PostMonthlyInterest posts accumulated interest to account balances
 func PostMonthlyInterest(yearMonth string) (int, error) {
-	// Get all accounts with unposted interest for this month
-	query := `SELECT account_number, SUM(daily_interest) as total_interest 
-	          FROM interest_accruals 
-	          WHERE accrual_date LIKE ? AND is_posted = 0
+	// Gunakan date range untuk menggantikan LIKE pada PostgreSQL DATE column
+	startDate := yearMonth + "-01"
+	endDate := yearMonth + "-31"
+
+	query := `SELECT account_number, SUM(daily_interest) as total_interest
+	          FROM interest_accruals
+	          WHERE accrual_date >= $1 AND accrual_date <= $2 AND is_posted = FALSE
 	          GROUP BY account_number`
 
-	rows, err := database.DB.Query(query, yearMonth+"%")
+	rows, err := database.DB.Query(query, startDate, endDate)
 	if err != nil {
 		return 0, err
 	}
@@ -145,7 +150,6 @@ func PostMonthlyInterest(yearMonth string) (int, error) {
 			continue
 		}
 
-		// Round to 2 decimal places
 		totalInterest = math.Round(totalInterest*100) / 100
 
 		tx, err := database.DB.Begin()
@@ -153,17 +157,16 @@ func PostMonthlyInterest(yearMonth string) (int, error) {
 			continue
 		}
 
-		// Credit interest to account balance
-		_, err = tx.Exec(`UPDATE accounts SET balance = balance + ?, avail_balance = avail_balance + ?, updated_at = CURRENT_TIMESTAMP 
-		                  WHERE account_number = ?`, totalInterest, totalInterest, accountNumber)
+		_, err = tx.Exec(`UPDATE accounts SET balance = balance + $1, avail_balance = avail_balance + $2, updated_at = NOW()
+		                  WHERE account_number = $3`, totalInterest, totalInterest, accountNumber)
 		if err != nil {
 			tx.Rollback()
 			continue
 		}
 
-		// Mark as posted
-		_, err = tx.Exec(`UPDATE interest_accruals SET is_posted = 1 WHERE account_number = ? AND accrual_date LIKE ? AND is_posted = 0`,
-			accountNumber, yearMonth+"%")
+		_, err = tx.Exec(`UPDATE interest_accruals SET is_posted = TRUE
+		                  WHERE account_number = $1 AND accrual_date >= $2 AND accrual_date <= $3 AND is_posted = FALSE`,
+			accountNumber, startDate, endDate)
 		if err != nil {
 			tx.Rollback()
 			continue
@@ -171,7 +174,6 @@ func PostMonthlyInterest(yearMonth string) (int, error) {
 
 		tx.Commit()
 
-		// GL entry: Debit Beban Bunga (511), Credit Tabungan (211)
 		CreateJournalEntry(today, fmt.Sprintf("Monthly interest posting for %s", accountNumber),
 			"interest", accountNumber, "SYSTEM", []JournalLineInput{
 				{AccountCode: "511", DebitAmount: totalInterest, Description: "Beban bunga tabungan"},
@@ -188,13 +190,12 @@ func PostMonthlyInterest(yearMonth string) (int, error) {
 func CalculateDepositInterest(depositNumber string) (float64, error) {
 	var principal, interestRate float64
 	var tenorMonths int
-	err := database.DB.QueryRow(`SELECT principal_amount, interest_rate, tenor_months FROM deposits WHERE deposit_number = ?`,
+	err := database.DB.QueryRow(`SELECT principal_amount, interest_rate, tenor_months FROM deposits WHERE deposit_number = $1`,
 		depositNumber).Scan(&principal, &interestRate, &tenorMonths)
 	if err != nil {
 		return 0, fmt.Errorf("deposit not found")
 	}
 
-	// Interest = Principal * Rate * Tenor / 12
 	interest := principal * (interestRate / 100) * float64(tenorMonths) / 12
 	return math.Round(interest*100) / 100, nil
 }
@@ -202,25 +203,24 @@ func CalculateDepositInterest(depositNumber string) (float64, error) {
 // CalculateLoanInterest calculates loan interest using annuity method
 func CalculateLoanInterest(loanNumber string) (float64, error) {
 	var outstanding, interestRate float64
-	err := database.DB.QueryRow(`SELECT outstanding_amount, interest_rate FROM loans WHERE loan_number = ?`,
+	err := database.DB.QueryRow(`SELECT outstanding_amount, interest_rate FROM loans WHERE loan_number = $1`,
 		loanNumber).Scan(&outstanding, &interestRate)
 	if err != nil {
 		return 0, fmt.Errorf("loan not found")
 	}
 
-	// Monthly interest = Outstanding * (Annual Rate / 12 / 100)
 	monthlyInterest := outstanding * interestRate / 12 / 100
 	return math.Round(monthlyInterest*100) / 100, nil
 }
 
 // GetInterestRates returns active interest rates with optional product type filter
 func GetInterestRates(productType string) ([]models.InterestRate, error) {
-	query := `SELECT id, product_type, product_name, rate_type, base_rate, min_balance, max_balance, 
-	           tenor_months, effective_date, is_active FROM interest_rates WHERE is_active = 1`
 	args := []interface{}{}
+	query := `SELECT id, product_type, product_name, rate_type, base_rate, min_balance, max_balance,
+	           tenor_months, effective_date, is_active FROM interest_rates WHERE is_active = TRUE`
 
 	if productType != "" {
-		query += " AND product_type = ?"
+		query += " AND product_type = $1"
 		args = append(args, productType)
 	}
 

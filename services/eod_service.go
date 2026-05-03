@@ -3,6 +3,7 @@ package services
 import (
 	"cbs-simulator/database"
 	"cbs-simulator/models"
+	"fmt"
 	"time"
 )
 
@@ -55,7 +56,7 @@ func RunEOD(processDate string) (*EODResult, error) {
 
 func runEODProcess(date, processType string, fn func() (int, int, error)) EODProcessResult {
 	startedAt := time.Now().UTC()
-	database.DB.Exec(`INSERT INTO eod_logs (process_date, process_type, status, started_at) VALUES (?, ?, 'running', ?)`,
+	database.DB.Exec(`INSERT INTO eod_logs (process_date, process_type, status, started_at) VALUES ($1, $2, 'running', $3)`,
 		date, processType, startedAt)
 
 	processed, failed, err := fn()
@@ -65,7 +66,8 @@ func runEODProcess(date, processType string, fn func() (int, int, error)) EODPro
 		status, errMsg = "failed", err.Error()
 	}
 
-	database.DB.Exec(`UPDATE eod_logs SET status=?, records_processed=?, records_failed=?, completed_at=?, error_message=? WHERE process_date=? AND process_type=? AND status='running'`,
+	database.DB.Exec(`UPDATE eod_logs SET status=$1, records_processed=$2, records_failed=$3, completed_at=$4, error_message=$5
+	                  WHERE process_date=$6 AND process_type=$7 AND status='running'`,
 		status, processed, failed, completedAt, errMsg, date, processType)
 
 	return EODProcessResult{ProcessType: processType, Status: status, RecordsProcessed: processed, RecordsFailed: failed, ErrorMessage: errMsg}
@@ -74,7 +76,7 @@ func runEODProcess(date, processType string, fn func() (int, int, error)) EODPro
 func CheckDormantAccounts() (int, int, error) {
 	cutoff := time.Now().UTC().AddDate(-1, 0, 0).Format("2006-01-02")
 	rows, err := database.DB.Query(`SELECT a.account_number FROM accounts a WHERE a.status='active' AND NOT EXISTS (
-		SELECT 1 FROM transactions t WHERE (t.from_account_number=a.account_number OR t.to_account_number=a.account_number) AND t.transaction_date > ?) AND a.balance > 0`, cutoff)
+		SELECT 1 FROM transactions t WHERE (t.from_account_number=a.account_number OR t.to_account_number=a.account_number) AND t.transaction_date > $1) AND a.balance > 0`, cutoff)
 	if err != nil {
 		return 0, 0, err
 	}
@@ -83,14 +85,14 @@ func CheckDormantAccounts() (int, int, error) {
 	for rows.Next() {
 		var acct string
 		rows.Scan(&acct)
-		database.DB.Exec(`UPDATE accounts SET status='dormant', updated_at=CURRENT_TIMESTAMP WHERE account_number=?`, acct)
+		database.DB.Exec(`UPDATE accounts SET status='dormant', updated_at=NOW() WHERE account_number=$1`, acct)
 		marked++
 	}
 	return marked, 0, nil
 }
 
 func GetEODStatus(date string) ([]models.EODLog, error) {
-	rows, err := database.DB.Query(`SELECT id, process_date, process_type, status, records_processed, records_failed, started_at, completed_at, error_message FROM eod_logs WHERE process_date=? ORDER BY id`, date)
+	rows, err := database.DB.Query(`SELECT id, process_date, process_type, status, records_processed, records_failed, started_at, completed_at, error_message FROM eod_logs WHERE process_date=$1 ORDER BY id`, date)
 	if err != nil {
 		return nil, err
 	}
@@ -111,23 +113,29 @@ func GetEODHistory(dateFrom, dateTo string, page, pageSize int) ([]models.EODLog
 	if pageSize < 1 {
 		pageSize = 20
 	}
-	query := `SELECT id, process_date, process_type, status, records_processed, records_failed, started_at, completed_at, error_message FROM eod_logs WHERE 1=1`
-	countQ := `SELECT COUNT(*) FROM eod_logs WHERE 1=1`
+
 	args := []interface{}{}
+	argN := 1
+	where := " WHERE 1=1"
+
 	if dateFrom != "" {
-		query += " AND process_date >= ?"
-		countQ += " AND process_date >= ?"
+		where += fmt.Sprintf(" AND process_date >= $%d", argN)
 		args = append(args, dateFrom)
+		argN++
 	}
 	if dateTo != "" {
-		query += " AND process_date <= ?"
-		countQ += " AND process_date <= ?"
+		where += fmt.Sprintf(" AND process_date <= $%d", argN)
 		args = append(args, dateTo)
+		argN++
 	}
+
 	var total int
-	database.DB.QueryRow(countQ, args...).Scan(&total)
-	query += " ORDER BY process_date DESC, id DESC LIMIT ? OFFSET ?"
+	database.DB.QueryRow(`SELECT COUNT(*) FROM eod_logs`+where, args...).Scan(&total)
+
+	query := `SELECT id, process_date, process_type, status, records_processed, records_failed, started_at, completed_at, error_message FROM eod_logs` +
+		where + fmt.Sprintf(" ORDER BY process_date DESC, id DESC LIMIT $%d OFFSET $%d", argN, argN+1)
 	args = append(args, pageSize, (page-1)*pageSize)
+
 	rows, err := database.DB.Query(query, args...)
 	if err != nil {
 		return nil, 0, err

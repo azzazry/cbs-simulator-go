@@ -37,16 +37,16 @@ func GetAuditLogs(c *gin.Context) {
 }
 
 // GetTransactionLimits returns all transaction limits (admin only)
+// Query param ?role=customer untuk filter per role
 func GetTransactionLimits(c *gin.Context) {
 	roleName := c.Query("role")
+	transactionType := c.Query("type")
 
-	var err error
-
-	if roleName != "" {
-		var limits interface{}
-		limits, err = services.GetTransactionLimits(roleName)
+	// Filter per role+type
+	if roleName != "" && transactionType != "" {
+		limit, err := services.GetTransactionLimit(roleName, transactionType)
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{
+			c.JSON(http.StatusNotFound, gin.H{
 				"status":  "error",
 				"message": err.Error(),
 			})
@@ -54,13 +54,13 @@ func GetTransactionLimits(c *gin.Context) {
 		}
 		c.JSON(http.StatusOK, gin.H{
 			"status": "success",
-			"data":   limits,
+			"data":   limit,
 		})
 		return
 	}
 
+	// Return semua limit
 	limits, err := services.GetAllTransactionLimits()
-
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"status":  "error",
@@ -76,9 +76,11 @@ func GetTransactionLimits(c *gin.Context) {
 }
 
 // UpdateTransactionLimit updates a specific transaction limit (admin only)
+// Body: { "role_name": "customer", "transaction_type": "transfer_intra", "daily_limit": 5000000, "per_transaction_limit": 1000000, "monthly_limit": 50000000 }
 func UpdateTransactionLimit(c *gin.Context) {
 	var req struct {
-		ID                  int     `json:"id" binding:"required"`
+		RoleName            string  `json:"role_name" binding:"required"`
+		TransactionType     string  `json:"transaction_type" binding:"required"`
 		DailyLimit          float64 `json:"daily_limit"`
 		PerTransactionLimit float64 `json:"per_transaction_limit"`
 		MonthlyLimit        float64 `json:"monthly_limit"`
@@ -87,12 +89,12 @@ func UpdateTransactionLimit(c *gin.Context) {
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"status":  "error",
-			"message": "Invalid request body",
+			"message": "role_name and transaction_type are required",
 		})
 		return
 	}
 
-	if err := services.UpdateTransactionLimit(req.ID, req.DailyLimit, req.PerTransactionLimit, req.MonthlyLimit); err != nil {
+	if err := services.UpdateTransactionLimit(req.RoleName, req.TransactionType, req.DailyLimit, req.PerTransactionLimit, req.MonthlyLimit); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"status":  "error",
 			"message": err.Error(),
@@ -102,11 +104,11 @@ func UpdateTransactionLimit(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{
 		"status":  "success",
-		"message": "Transaction limit updated",
+		"message": "Transaction limit updated for " + req.RoleName + " / " + req.TransactionType,
 	})
 }
 
-// GetUserRoles returns roles for a specific user or all roles (admin only)
+// GetUserRolesHandler returns roles for a specific user or all roles (admin only)
 func GetUserRolesHandler(c *gin.Context) {
 	cif := c.Query("cif")
 
@@ -126,7 +128,6 @@ func GetUserRolesHandler(c *gin.Context) {
 		return
 	}
 
-	// Return all available roles
 	roles, err := services.GetAllRoles()
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
@@ -142,7 +143,7 @@ func GetUserRolesHandler(c *gin.Context) {
 	})
 }
 
-// AssignRole assigns a role to a user (admin only)
+// AssignRoleHandler assigns a role to a user (admin only)
 func AssignRoleHandler(c *gin.Context) {
 	var req struct {
 		CIF      string `json:"cif" binding:"required"`
@@ -157,7 +158,6 @@ func AssignRoleHandler(c *gin.Context) {
 		return
 	}
 
-	// Get role ID
 	role, err := services.GetRoleByName(req.RoleName)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
@@ -167,7 +167,6 @@ func AssignRoleHandler(c *gin.Context) {
 		return
 	}
 
-	// Get admin CIF from context
 	adminCIF, _ := c.Get("cif")
 
 	if err := services.AssignRole(req.CIF, role.ID, adminCIF.(string)); err != nil {

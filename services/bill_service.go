@@ -9,49 +9,47 @@ import (
 	"cbs-simulator/utils"
 )
 
-// GetBillByCustomerNumber retrieves unpaid bill by customer number
 func GetBillByCustomerNumber(billerCode, customerNumber string) (*models.BillPayment, error) {
 	var bill models.BillPayment
-	
-	query := `SELECT id, biller_code, biller_name, customer_number, bill_number, 
-	          bill_amount, admin_fee, total_amount, bill_period, due_date, status, 
-	          transaction_id, payment_date, created_at, updated_at 
-	          FROM bill_payments 
-	          WHERE biller_code = ? AND customer_number = ? AND status = 'unpaid' 
+
+	query := `SELECT id, biller_code, biller_name, customer_number, bill_number,
+	          bill_amount, admin_fee, total_amount, bill_period, due_date, status,
+	          transaction_id, payment_date, created_at, updated_at
+	          FROM bill_payments
+	          WHERE biller_code = $1 AND customer_number = $2 AND status = 'unpaid'
 	          ORDER BY due_date ASC LIMIT 1`
-	
+
 	err := database.DB.QueryRow(query, billerCode, customerNumber).Scan(
 		&bill.ID, &bill.BillerCode, &bill.BillerName, &bill.CustomerNumber,
 		&bill.BillNumber, &bill.BillAmount, &bill.AdminFee, &bill.TotalAmount,
 		&bill.BillPeriod, &bill.DueDate, &bill.Status, &bill.TransactionID,
 		&bill.PaymentDate, &bill.CreatedAt, &bill.UpdatedAt,
 	)
-	
+
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, fmt.Errorf("no unpaid bill found for customer")
 		}
 		return nil, err
 	}
-	
+
 	return &bill, nil
 }
 
-// GetAllUnpaidBills retrieves all unpaid bills
 func GetAllUnpaidBills() ([]models.BillPayment, error) {
-	query := `SELECT id, biller_code, biller_name, customer_number, bill_number, 
-	          bill_amount, admin_fee, total_amount, bill_period, due_date, status, 
-	          transaction_id, payment_date, created_at, updated_at 
-	          FROM bill_payments 
-	          WHERE status = 'unpaid' 
+	query := `SELECT id, biller_code, biller_name, customer_number, bill_number,
+	          bill_amount, admin_fee, total_amount, bill_period, due_date, status,
+	          transaction_id, payment_date, created_at, updated_at
+	          FROM bill_payments
+	          WHERE status = 'unpaid'
 	          ORDER BY due_date ASC`
-	
+
 	rows, err := database.DB.Query(query)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	
+
 	var bills []models.BillPayment
 	for rows.Next() {
 		var bill models.BillPayment
@@ -66,101 +64,88 @@ func GetAllUnpaidBills() ([]models.BillPayment, error) {
 		}
 		bills = append(bills, bill)
 	}
-	
+
 	return bills, nil
 }
 
-// PayBill processes bill payment
 func PayBill(accountNumber, billNumber string) (*models.Transaction, error) {
-	// Get bill details
 	var bill models.BillPayment
-	query := `SELECT id, biller_code, biller_name, customer_number, bill_number, 
-	          bill_amount, admin_fee, total_amount, bill_period, due_date, status 
-	          FROM bill_payments WHERE bill_number = ? AND status = 'unpaid'`
-	
+	query := `SELECT id, biller_code, biller_name, customer_number, bill_number,
+	          bill_amount, admin_fee, total_amount, bill_period, due_date, status
+	          FROM bill_payments WHERE bill_number = $1 AND status = 'unpaid'`
+
 	err := database.DB.QueryRow(query, billNumber).Scan(
 		&bill.ID, &bill.BillerCode, &bill.BillerName, &bill.CustomerNumber,
 		&bill.BillNumber, &bill.BillAmount, &bill.AdminFee, &bill.TotalAmount,
 		&bill.BillPeriod, &bill.DueDate, &bill.Status,
 	)
-	
+
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, fmt.Errorf("bill not found or already paid")
 		}
 		return nil, err
 	}
-	
-	// Validate account
+
 	account, err := GetAccountBalance(accountNumber)
 	if err != nil {
 		return nil, fmt.Errorf("account not found: %v", err)
 	}
-	
+
 	if account.Status != "active" {
 		return nil, fmt.Errorf("account is not active")
 	}
-	
-	// Check balance
+
 	if account.AvailBalance < bill.TotalAmount {
 		return nil, fmt.Errorf("insufficient balance")
 	}
-	
-	// Start transaction
+
 	tx, err := database.DB.Begin()
 	if err != nil {
 		return nil, err
 	}
 	defer tx.Rollback()
-	
-	// Debit from account
-	_, err = tx.Exec(`UPDATE accounts SET balance = balance - ?, avail_balance = avail_balance - ?, 
-	                  updated_at = CURRENT_TIMESTAMP WHERE account_number = ?`,
+
+	_, err = tx.Exec(`UPDATE accounts SET balance = balance - $1, avail_balance = avail_balance - $2,
+	                  updated_at = NOW() WHERE account_number = $3`,
 		bill.TotalAmount, bill.TotalAmount, accountNumber)
 	if err != nil {
 		return nil, err
 	}
-	
-	// Create transaction record
+
 	transactionID := utils.GenerateTransactionID()
 	referenceNumber := utils.GenerateReferenceNumber()
 	settlementDate := utils.GetCurrentDate()
 	description := fmt.Sprintf("Payment for %s - %s", bill.BillerName, bill.BillPeriod)
-	
-	result, err := tx.Exec(`INSERT INTO transactions (transaction_id, transaction_type, 
-	                        from_account_number, to_account_number, amount, currency, 
-	                        description, reference_number, status, settlement_date, fee) 
-	                        VALUES (?, 'payment_bill', ?, NULL, ?, 'IDR', ?, ?, 'success', ?, ?)`,
+
+	var trxID int64
+	err = tx.QueryRow(`INSERT INTO transactions (transaction_id, transaction_type,
+	                   from_account_number, to_account_number, amount, currency,
+	                   description, reference_number, status, settlement_date, fee)
+	                   VALUES ($1, 'payment_bill', $2, NULL, $3, 'IDR', $4, $5, 'success', $6, $7)
+	                   RETURNING id`,
 		transactionID, accountNumber, bill.TotalAmount, description,
-		referenceNumber, settlementDate, bill.AdminFee)
-	
+		referenceNumber, settlementDate, bill.AdminFee).Scan(&trxID)
 	if err != nil {
 		return nil, err
 	}
-	
-	// Update bill status
+
 	paymentDate := utils.GetCurrentDate()
-	_, err = tx.Exec(`UPDATE bill_payments SET status = 'paid', transaction_id = ?, 
-	                  payment_date = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+	_, err = tx.Exec(`UPDATE bill_payments SET status = 'paid', transaction_id = $1,
+	                  payment_date = $2, updated_at = NOW() WHERE id = $3`,
 		transactionID, paymentDate, bill.ID)
-	
 	if err != nil {
 		return nil, err
 	}
-	
-	// Commit transaction
+
 	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
-	
-	// Simulate processing delay
+
 	utils.SimulateDelay(800)
-	
-	// Retrieve transaction
-	trxID, _ := result.LastInsertId()
+
 	transaction, _ := GetTransactionByID(int(trxID))
 
-	// Trigger notification
 	cif, _ := GetCIFByAccountNumber(accountNumber)
 	if cif != "" {
 		SaveNotification(cif, "payment", "Pembayaran Berhasil",
@@ -173,7 +158,6 @@ func PayBill(accountNumber, billNumber string) (*models.Transaction, error) {
 	return transaction, nil
 }
 
-// GetBillerList returns list of available billers
 func GetBillerList() []map[string]string {
 	return []map[string]string{
 		{"code": "PLN", "name": "PT PLN (Persero)", "category": "Electricity"},

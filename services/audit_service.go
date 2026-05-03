@@ -6,11 +6,10 @@ import (
 	"fmt"
 )
 
-// LogAudit inserts an audit log entry
 func LogAudit(log models.AuditLog) error {
-	query := `INSERT INTO audit_logs (cif, action, resource, resource_id, ip_address, user_agent, 
-	          request_method, request_path, request_body, response_status, details) 
-	          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+	query := `INSERT INTO audit_logs (cif, action, resource, resource_id, ip_address, user_agent,
+	          request_method, request_path, request_body, response_status, details)
+	          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`
 
 	_, err := database.DB.Exec(query, log.CIF, log.Action, log.Resource, log.ResourceID,
 		log.IPAddress, log.UserAgent, log.RequestMethod, log.RequestPath,
@@ -18,7 +17,6 @@ func LogAudit(log models.AuditLog) error {
 	return err
 }
 
-// GetAuditLogs returns paginated audit logs with optional filters
 func GetAuditLogs(cif, action string, page, pageSize int) ([]models.AuditLog, int, error) {
 	if page < 1 {
 		page = 1
@@ -28,38 +26,32 @@ func GetAuditLogs(cif, action string, page, pageSize int) ([]models.AuditLog, in
 	}
 	offset := (page - 1) * pageSize
 
-	// Count total
-	countQuery := `SELECT COUNT(*) FROM audit_logs WHERE 1=1`
 	args := []interface{}{}
+	argN := 1
+	where := " WHERE 1=1"
 
 	if cif != "" {
-		countQuery += ` AND cif = ?`
+		where += fmt.Sprintf(` AND cif = $%d`, argN)
 		args = append(args, cif)
+		argN++
 	}
 	if action != "" {
-		countQuery += ` AND action = ?`
+		where += fmt.Sprintf(` AND action = $%d`, argN)
 		args = append(args, action)
+		argN++
 	}
 
 	var total int
-	err := database.DB.QueryRow(countQuery, args...).Scan(&total)
+	err := database.DB.QueryRow(`SELECT COUNT(*) FROM audit_logs`+where, args...).Scan(&total)
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to count audit logs: %v", err)
 	}
 
-	// Fetch logs
-	dataQuery := `SELECT id, COALESCE(cif,''), action, COALESCE(resource,''), COALESCE(resource_id,''), 
-	              COALESCE(ip_address,''), COALESCE(user_agent,''), COALESCE(request_method,''), 
-	              COALESCE(request_path,''), COALESCE(request_body,''), COALESCE(response_status,0), 
-	              COALESCE(details,''), created_at FROM audit_logs WHERE 1=1`
-
-	if cif != "" {
-		dataQuery += ` AND cif = ?`
-	}
-	if action != "" {
-		dataQuery += ` AND action = ?`
-	}
-	dataQuery += ` ORDER BY created_at DESC LIMIT ? OFFSET ?`
+	dataQuery := `SELECT id, COALESCE(cif,''), action, COALESCE(resource,''), COALESCE(resource_id,''),
+	              COALESCE(ip_address,''), COALESCE(user_agent,''), COALESCE(request_method,''),
+	              COALESCE(request_path,''), COALESCE(request_body,''), COALESCE(response_status,0),
+	              COALESCE(details,''), created_at FROM audit_logs` + where +
+		fmt.Sprintf(` ORDER BY created_at DESC LIMIT $%d OFFSET $%d`, argN, argN+1)
 	args = append(args, pageSize, offset)
 
 	rows, err := database.DB.Query(dataQuery, args...)

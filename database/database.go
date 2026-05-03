@@ -7,35 +7,31 @@ import (
 	"log"
 	"os"
 
-	_ "modernc.org/sqlite"
+	_ "github.com/jackc/pgx/v5/stdlib"
 )
 
 var DB *sql.DB
 
-// InitDB initializes the database connection and creates tables
+// InitDB initializes the PostgreSQL connection and runs migrations
 func InitDB() error {
 	var err error
 
-	// Ensure database directory exists
-	dbDir := "./database"
-	if _, err := os.Stat(dbDir); os.IsNotExist(err) {
-		if err := os.MkdirAll(dbDir, 0755); err != nil {
-			return fmt.Errorf("failed to create database directory: %v", err)
-		}
-	}
-
-	// Open database connection
-	DB, err = sql.Open("sqlite", config.AppConfig.DatabasePath)
+	// Open database connection via pgx stdlib driver
+	DB, err = sql.Open("pgx", config.AppConfig.DatabaseDSN)
 	if err != nil {
 		return fmt.Errorf("failed to open database: %v", err)
 	}
+
+	// Connection pool tuning
+	DB.SetMaxOpenConns(25)
+	DB.SetMaxIdleConns(10)
 
 	// Test connection
 	if err := DB.Ping(); err != nil {
 		return fmt.Errorf("failed to ping database: %v", err)
 	}
 
-	log.Println("Database connection established")
+	log.Println("PostgreSQL connection established")
 
 	// Run migrations
 	if err := runMigrations(); err != nil {
@@ -84,8 +80,8 @@ func runMigrations() error {
 func runSeeders() error {
 	seederFiles := []string{
 		"./database/seeders/001_sample_data.sql",
-		"./database/seeders/002_notifications_seed.sql",
-		"./database/seeders/003_banks_seed.sql",
+		"./database/seeders/002_sample_banks.sql",
+		"./database/seeders/003_sample_transfer_fees.sql",
 		"./database/seeders/004_security_seed.sql",
 		"./database/seeders/005_core_banking_seed.sql",
 	}
@@ -106,7 +102,7 @@ func runSeeders() error {
 	return nil
 }
 
-// isEmpty checks if the database is empty
+// isEmpty checks if the database is empty (no customers yet)
 func isEmpty() bool {
 	var count int
 	err := DB.QueryRow("SELECT COUNT(*) FROM customers").Scan(&count)

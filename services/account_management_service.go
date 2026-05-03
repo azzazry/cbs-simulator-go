@@ -23,9 +23,8 @@ type OpenAccountResponse struct {
 }
 
 func OpenAccount(req OpenAccountRequest) (*OpenAccountResponse, error) {
-	// Validate customer
 	var count int
-	database.DB.QueryRow(`SELECT COUNT(*) FROM customers WHERE cif = ? AND status = 'active'`, req.CIF).Scan(&count)
+	database.DB.QueryRow(`SELECT COUNT(*) FROM customers WHERE cif = $1 AND status = 'active'`, req.CIF).Scan(&count)
 	if count == 0 {
 		return nil, fmt.Errorf("customer not found or inactive")
 	}
@@ -34,21 +33,19 @@ func OpenAccount(req OpenAccountRequest) (*OpenAccountResponse, error) {
 		req.Currency = "IDR"
 	}
 
-	// Generate account number
 	var maxID int
 	database.DB.QueryRow(`SELECT COALESCE(MAX(id), 0) FROM accounts`).Scan(&maxID)
 	accountNumber := fmt.Sprintf("100%07d", maxID+1)
 
 	today := time.Now().UTC().Format("2006-01-02")
 
-	_, err := database.DB.Exec(`INSERT INTO accounts (account_number, cif, account_type, currency, balance, avail_balance, status, opened_date, branch) 
-	                            VALUES (?, ?, ?, ?, ?, ?, 'active', ?, ?)`,
+	_, err := database.DB.Exec(`INSERT INTO accounts (account_number, cif, account_type, currency, balance, avail_balance, status, opened_date, branch)
+	                            VALUES ($1, $2, $3, $4, $5, $6, 'active', $7, $8)`,
 		accountNumber, req.CIF, req.AccountType, req.Currency, req.InitialDeposit, req.InitialDeposit, today, req.Branch)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create account: %v", err)
 	}
 
-	// GL entry if initial deposit > 0
 	if req.InitialDeposit > 0 {
 		CreateJournalEntry(today, fmt.Sprintf("Account opening deposit %s", accountNumber),
 			"opening", accountNumber, "SYSTEM", []JournalLineInput{
@@ -69,7 +66,7 @@ func OpenAccount(req OpenAccountRequest) (*OpenAccountResponse, error) {
 func CloseAccount(accountNumber, reason string) error {
 	var balance float64
 	var status string
-	err := database.DB.QueryRow(`SELECT balance, status FROM accounts WHERE account_number = ?`, accountNumber).Scan(&balance, &status)
+	err := database.DB.QueryRow(`SELECT balance, status FROM accounts WHERE account_number = $1`, accountNumber).Scan(&balance, &status)
 	if err != nil {
 		return fmt.Errorf("account not found")
 	}
@@ -81,7 +78,7 @@ func CloseAccount(accountNumber, reason string) error {
 	}
 
 	today := time.Now().UTC().Format("2006-01-02")
-	_, err = database.DB.Exec(`UPDATE accounts SET status = 'closed', updated_at = CURRENT_TIMESTAMP WHERE account_number = ?`, accountNumber)
+	_, err = database.DB.Exec(`UPDATE accounts SET status = 'closed', updated_at = NOW() WHERE account_number = $1`, accountNumber)
 	if err != nil {
 		return fmt.Errorf("failed to close account: %v", err)
 	}
@@ -117,12 +114,12 @@ func GetDormantAccounts() ([]map[string]interface{}, error) {
 }
 
 func ReactivateAccount(accountNumber string) error {
-	result, err := database.DB.Exec(`UPDATE accounts SET status = 'active', updated_at = CURRENT_TIMESTAMP WHERE account_number = ? AND status = 'dormant'`, accountNumber)
+	result, err := database.DB.Exec(`UPDATE accounts SET status = 'active', updated_at = NOW() WHERE account_number = $1 AND status = 'dormant'`, accountNumber)
 	if err != nil {
 		return err
 	}
-	rows, _ := result.RowsAffected()
-	if rows == 0 {
+	rowsAff, _ := result.RowsAffected()
+	if rowsAff == 0 {
 		return fmt.Errorf("account not found or not dormant")
 	}
 	return nil

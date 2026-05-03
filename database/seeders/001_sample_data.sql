@@ -43,9 +43,9 @@ INSERT INTO loans (loan_number, cif, account_number, loan_type, principal_amount
 
 -- Insert Sample Deposits
 INSERT INTO deposits (deposit_number, cif, principal_amount, interest_rate, tenor_months, open_date, maturity_date, maturity_amount, auto_renew, status, linked_account) VALUES
-('DEP001', 'CIF001', 50000000.00, 5.50, 12, '2025-03-01', '2026-03-01', 52750000.00, 1, 'active', '1001234567'),
-('DEP002', 'CIF004', 100000000.00, 6.00, 24, '2022-05-20', '2024-05-20', 112360000.00, 0, 'matured', '1001234570'),
-('DEP003', 'CIF005', 75000000.00, 5.75, 18, '2024-09-10', '2026-03-10', 81468750.00, 1, 'active', '1001234571');
+('DEP001', 'CIF001', 50000000.00, 5.50, 12, '2025-03-01', '2026-03-01', 52750000.00, true, 'active', '1001234567'),
+('DEP002', 'CIF004', 100000000.00, 6.00, 24, '2022-05-20', '2024-05-20', 112360000.00, false, 'matured', '1001234570'),
+('DEP003', 'CIF005', 75000000.00, 5.75, 18, '2024-09-10', '2026-03-10', 81468750.00, true, 'active', '1001234571');
 
 -- Insert Sample Bill Payments (PPOB)
 INSERT INTO bill_payments (biller_code, biller_name, customer_number, bill_number, bill_amount, admin_fee, total_amount, bill_period, due_date, status) VALUES

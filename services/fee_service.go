@@ -8,16 +8,14 @@ import (
 	"time"
 )
 
-// CalculateTransferFee calculates the fee for a transfer OUT to another bank (interbank transfer)
-// This bank is ONE specific bank. When customers transfer to other banks, they pay a fee.
-// Intrabank (same bank) transfers are always FREE
+// CalculateTransferFee calculates outbound interbank transfer fee
 func CalculateTransferFee(destinationBankCode string, amount float64) (float64, error) {
-	query := `SELECT fee_type, fee_amount, fee_percentage, minimum_amount, maximum_amount 
-	          FROM transfer_fees 
-	          WHERE destination_bank_code = ? 
-	          AND is_active = 1 
-	          AND effective_from <= datetime('now')
-	          AND (effective_to IS NULL OR effective_to > datetime('now'))
+	query := `SELECT fee_type, fee_amount, fee_percentage, minimum_amount, maximum_amount
+	          FROM transfer_fees
+	          WHERE destination_bank_code = $1
+	          AND is_active = TRUE
+	          AND effective_from <= NOW()
+	          AND (effective_to IS NULL OR effective_to > NOW())
 	          LIMIT 1`
 
 	var feeType string
@@ -28,17 +26,13 @@ func CalculateTransferFee(destinationBankCode string, amount float64) (float64, 
 	)
 
 	if err != nil {
-		// Return default fee if not found (Rp 5000)
 		return 5000, nil
 	}
 
-	// Check minimum and maximum amount constraints
 	if amount < minAmount || amount > maxAmount {
-		// Use default fee if amount is outside bounds
 		return 5000, nil
 	}
 
-	// Calculate fee based on type
 	var fee float64
 	if feeType == "percentage" {
 		fee = (amount * feePercentage) / 100
@@ -49,14 +43,14 @@ func CalculateTransferFee(destinationBankCode string, amount float64) (float64, 
 	return fee, nil
 }
 
-// CalculateServiceFee calculates the fee for a service (e-wallet top-up, VA payment, QRIS, etc)
+// CalculateServiceFee calculates service fee (e-wallet, VA, QRIS, etc)
 func CalculateServiceFee(serviceCode string, amount float64) (float64, error) {
-	query := `SELECT fee_type, fee_amount, fee_percentage, minimum_amount, maximum_amount 
-	          FROM service_fees 
-	          WHERE service_code = ? 
-	          AND is_active = 1 
-	          AND effective_from <= datetime('now')
-	          AND (effective_to IS NULL OR effective_to > datetime('now'))
+	query := `SELECT fee_type, fee_amount, fee_percentage, minimum_amount, maximum_amount
+	          FROM service_fees
+	          WHERE service_code = $1
+	          AND is_active = TRUE
+	          AND effective_from <= NOW()
+	          AND (effective_to IS NULL OR effective_to > NOW())
 	          LIMIT 1`
 
 	var feeType string
@@ -67,16 +61,13 @@ func CalculateServiceFee(serviceCode string, amount float64) (float64, error) {
 	)
 
 	if err != nil {
-		// Return default fee if not found
 		return 0, fmt.Errorf("service fee not found: %w", err)
 	}
 
-	// Check minimum and maximum amount constraints
 	if amount < minAmount || amount > maxAmount {
 		return 0, fmt.Errorf("amount %f is outside allowed range (%.0f - %.0f)", amount, minAmount, maxAmount)
 	}
 
-	// Calculate fee based on type
 	var fee float64
 	if feeType == "percentage" {
 		fee = (amount * feePercentage) / 100
@@ -87,13 +78,12 @@ func CalculateServiceFee(serviceCode string, amount float64) (float64, error) {
 	return fee, nil
 }
 
-// GetTransferFee retrieves a specific transfer fee configuration
 func GetTransferFee(destinationBankCode string) (*models.TransferFee, error) {
-	query := `SELECT id, destination_bank_code, destination_bank_name, fee_type, fee_amount, 
-	          fee_percentage, minimum_amount, maximum_amount, description, is_active, 
+	query := `SELECT id, destination_bank_code, destination_bank_name, fee_type, fee_amount,
+	          fee_percentage, minimum_amount, maximum_amount, description, is_active,
 	          effective_from, effective_to, notes, created_at, updated_at
-	          FROM transfer_fees 
-	          WHERE destination_bank_code = ? AND is_active = 1
+	          FROM transfer_fees
+	          WHERE destination_bank_code = $1 AND is_active = TRUE
 	          LIMIT 1`
 
 	var fee models.TransferFee
@@ -114,13 +104,12 @@ func GetTransferFee(destinationBankCode string) (*models.TransferFee, error) {
 	return &fee, nil
 }
 
-// GetAllTransferFees retrieves all transfer fees
 func GetAllTransferFees() ([]models.TransferFee, error) {
-	query := `SELECT id, destination_bank_code, destination_bank_name, fee_type, fee_amount, 
-	          fee_percentage, minimum_amount, maximum_amount, description, is_active, 
+	query := `SELECT id, destination_bank_code, destination_bank_name, fee_type, fee_amount,
+	          fee_percentage, minimum_amount, maximum_amount, description, is_active,
 	          effective_from, effective_to, notes, created_at, updated_at
-	          FROM transfer_fees 
-	          WHERE is_active = 1
+	          FROM transfer_fees
+	          WHERE is_active = TRUE
 	          ORDER BY destination_bank_name`
 
 	rows, err := database.DB.Query(query)
@@ -151,11 +140,10 @@ func GetAllTransferFees() ([]models.TransferFee, error) {
 	return fees, nil
 }
 
-// UpdateTransferFee updates transfer fee configuration
 func UpdateTransferFee(destinationBankCode string, feeAmount float64, feeType string) error {
-	query := `UPDATE transfer_fees 
-	          SET fee_amount = ?, fee_type = ?, updated_at = datetime('now')
-	          WHERE destination_bank_code = ?`
+	query := `UPDATE transfer_fees
+	          SET fee_amount = $1, fee_type = $2, updated_at = NOW()
+	          WHERE destination_bank_code = $3`
 
 	_, err := database.DB.Exec(query, feeAmount, feeType, destinationBankCode)
 	if err != nil {
@@ -165,13 +153,12 @@ func UpdateTransferFee(destinationBankCode string, feeAmount float64, feeType st
 	return nil
 }
 
-// GetServiceFee retrieves a specific service fee configuration
 func GetServiceFee(serviceCode string) (*models.ServiceFee, error) {
-	query := `SELECT id, service_code, service_name, service_type, fee_type, fee_amount, 
-	          fee_percentage, minimum_amount, maximum_amount, is_active, effective_from, 
+	query := `SELECT id, service_code, service_name, service_type, fee_type, fee_amount,
+	          fee_percentage, minimum_amount, maximum_amount, is_active, effective_from,
 	          effective_to, notes, created_at, updated_at
-	          FROM service_fees 
-	          WHERE service_code = ? AND is_active = 1
+	          FROM service_fees
+	          WHERE service_code = $1 AND is_active = TRUE
 	          LIMIT 1`
 
 	var fee models.ServiceFee
@@ -192,43 +179,33 @@ func GetServiceFee(serviceCode string) (*models.ServiceFee, error) {
 	return &fee, nil
 }
 
-// GetAllServiceFees retrieves all service fees
 func GetAllServiceFees(serviceType string) ([]models.ServiceFee, error) {
-	query := `SELECT id, service_code, service_name, service_type, fee_type, fee_amount, 
-	          fee_percentage, minimum_amount, maximum_amount, is_active, effective_from, 
+	args := []interface{}{}
+	query := `SELECT id, service_code, service_name, service_type, fee_type, fee_amount,
+	          fee_percentage, minimum_amount, maximum_amount, is_active, effective_from,
 	          effective_to, notes, created_at, updated_at
-	          FROM service_fees 
-	          WHERE is_active = 1`
+	          FROM service_fees
+	          WHERE is_active = TRUE`
 
 	if serviceType != "" {
-		query += ` AND service_type = ?`
+		query += ` AND service_type = $1`
+		args = append(args, serviceType)
 	}
 
 	query += ` ORDER BY service_type, service_code`
 
-	var rows interface{}
-	var err error
-
-	if serviceType != "" {
-		rows, err = database.DB.Query(query, serviceType)
-	} else {
-		rows, err = database.DB.Query(query)
-	}
-
+	rows, err := database.DB.Query(query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query service fees: %w", err)
 	}
-
-	// Cast to *sql.Rows type
-	sqlRows := rows.(*sql.Rows)
-	defer sqlRows.Close()
+	defer rows.Close()
 
 	var fees []models.ServiceFee
-	for sqlRows.Next() {
+	for rows.Next() {
 		var fee models.ServiceFee
 		var effectiveTo *time.Time
 
-		err := sqlRows.Scan(
+		err := rows.Scan(
 			&fee.ID, &fee.ServiceCode, &fee.ServiceName, &fee.ServiceType, &fee.FeeType,
 			&fee.FeeAmount, &fee.FeePercentage, &fee.MinimumAmount, &fee.MaximumAmount,
 			&fee.IsActive, &fee.EffectiveFrom, &effectiveTo, &fee.Notes,
@@ -245,11 +222,10 @@ func GetAllServiceFees(serviceType string) ([]models.ServiceFee, error) {
 	return fees, nil
 }
 
-// UpdateServiceFee updates service fee configuration
 func UpdateServiceFee(serviceCode string, feeAmount float64, feePercentage float64, feeType string) error {
-	query := `UPDATE service_fees 
-	          SET fee_amount = ?, fee_percentage = ?, fee_type = ?, updated_at = datetime('now')
-	          WHERE service_code = ?`
+	query := `UPDATE service_fees
+	          SET fee_amount = $1, fee_percentage = $2, fee_type = $3, updated_at = NOW()
+	          WHERE service_code = $4`
 
 	_, err := database.DB.Exec(query, feeAmount, feePercentage, feeType, serviceCode)
 	if err != nil {
@@ -259,13 +235,12 @@ func UpdateServiceFee(serviceCode string, feeAmount float64, feePercentage float
 	return nil
 }
 
-// GetServiceFeesByType retrieves all service fees by type
 func GetServiceFeesByType(serviceType string) ([]models.ServiceFee, error) {
-	query := `SELECT id, service_code, service_name, service_type, fee_type, fee_amount, 
-	          fee_percentage, minimum_amount, maximum_amount, is_active, effective_from, 
+	query := `SELECT id, service_code, service_name, service_type, fee_type, fee_amount,
+	          fee_percentage, minimum_amount, maximum_amount, is_active, effective_from,
 	          effective_to, notes, created_at, updated_at
-	          FROM service_fees 
-	          WHERE service_type = ? AND is_active = 1
+	          FROM service_fees
+	          WHERE service_type = $1 AND is_active = TRUE
 	          ORDER BY service_code`
 
 	rows, err := database.DB.Query(query, serviceType)
@@ -294,4 +269,13 @@ func GetServiceFeesByType(serviceType string) ([]models.ServiceFee, error) {
 	}
 
 	return fees, nil
+}
+
+// GetServiceFeeRows helper used in GetAllServiceFees (replaces interface{} cast workaround)
+func GetServiceFeeRows(serviceType string) (*sql.Rows, error) {
+	if serviceType != "" {
+		return database.DB.Query(
+			`SELECT id FROM service_fees WHERE service_type = $1 AND is_active = TRUE`, serviceType)
+	}
+	return database.DB.Query(`SELECT id FROM service_fees WHERE is_active = TRUE`)
 }

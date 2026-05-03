@@ -8,7 +8,7 @@
 -- =============================================
 
 -- ASET (1xx)
-INSERT OR IGNORE INTO chart_of_accounts (account_code, account_name, account_type, parent_code, level, normal_balance) VALUES
+INSERT INTO chart_of_accounts (account_code, account_name, account_type, parent_code, level, normal_balance) VALUES
 ('100', 'ASET', 'asset', NULL, 1, 'debit'),
 ('110', 'Kas dan Setara Kas', 'asset', '100', 2, 'debit'),
 ('111', 'Kas', 'asset', '110', 3, 'debit'),
@@ -33,7 +33,7 @@ INSERT OR IGNORE INTO chart_of_accounts (account_code, account_name, account_typ
 ('152', 'Biaya Dibayar Dimuka', 'asset', '150', 3, 'debit');
 
 -- KEWAJIBAN / LIABILITAS (2xx)
-INSERT OR IGNORE INTO chart_of_accounts (account_code, account_name, account_type, parent_code, level, normal_balance) VALUES
+INSERT INTO chart_of_accounts (account_code, account_name, account_type, parent_code, level, normal_balance) VALUES
 ('200', 'KEWAJIBAN', 'liability', NULL, 1, 'credit'),
 ('210', 'Dana Pihak Ketiga (DPK)', 'liability', '200', 2, 'credit'),
 ('211', 'Tabungan', 'liability', '210', 3, 'credit'),
@@ -47,7 +47,7 @@ INSERT OR IGNORE INTO chart_of_accounts (account_code, account_name, account_typ
 ('231', 'Pendapatan Diterima Dimuka', 'liability', '230', 3, 'credit');
 
 -- EKUITAS (3xx)
-INSERT OR IGNORE INTO chart_of_accounts (account_code, account_name, account_type, parent_code, level, normal_balance) VALUES
+INSERT INTO chart_of_accounts (account_code, account_name, account_type, parent_code, level, normal_balance) VALUES
 ('300', 'EKUITAS', 'equity', NULL, 1, 'credit'),
 ('310', 'Modal', 'equity', '300', 2, 'credit'),
 ('311', 'Modal Disetor', 'equity', '310', 3, 'credit'),
@@ -57,7 +57,7 @@ INSERT OR IGNORE INTO chart_of_accounts (account_code, account_name, account_typ
 ('322', 'Laba Tahun Berjalan', 'equity', '320', 3, 'credit');
 
 -- PENDAPATAN (4xx)
-INSERT OR IGNORE INTO chart_of_accounts (account_code, account_name, account_type, parent_code, level, normal_balance) VALUES
+INSERT INTO chart_of_accounts (account_code, account_name, account_type, parent_code, level, normal_balance) VALUES
 ('400', 'PENDAPATAN', 'revenue', NULL, 1, 'credit'),
 ('410', 'Pendapatan Bunga', 'revenue', '400', 2, 'credit'),
 ('411', 'Pendapatan Bunga Kredit', 'revenue', '410', 3, 'credit'),
@@ -73,7 +73,7 @@ INSERT OR IGNORE INTO chart_of_accounts (account_code, account_name, account_typ
 ('432', 'Pendapatan Lain-lain', 'revenue', '430', 3, 'credit');
 
 -- BEBAN (5xx)
-INSERT OR IGNORE INTO chart_of_accounts (account_code, account_name, account_type, parent_code, level, normal_balance) VALUES
+INSERT INTO chart_of_accounts (account_code, account_name, account_type, parent_code, level, normal_balance) VALUES
 ('500', 'BEBAN', 'expense', NULL, 1, 'debit'),
 ('510', 'Beban Bunga', 'expense', '500', 2, 'debit'),
 ('511', 'Beban Bunga Tabungan', 'expense', '510', 3, 'debit'),
@@ -95,38 +95,42 @@ INSERT OR IGNORE INTO chart_of_accounts (account_code, account_name, account_typ
 -- =============================================
 
 -- Tabungan (Savings)
-INSERT OR IGNORE INTO interest_rates (product_type, product_name, rate_type, base_rate, min_balance, max_balance, effective_date) VALUES
+INSERT INTO interest_rates (product_type, product_name, rate_type, base_rate, min_balance, max_balance, effective_date) VALUES
 ('savings', 'Tabungan Reguler', 'tiered', 0.50, 0, 10000000, '2026-01-01'),
 ('savings', 'Tabungan Reguler', 'tiered', 1.00, 10000000, 100000000, '2026-01-01'),
 ('savings', 'Tabungan Reguler', 'tiered', 1.50, 100000000, 1000000000, '2026-01-01'),
 ('savings', 'Tabungan Reguler', 'tiered', 2.00, 1000000000, NULL, '2026-01-01');
 
 -- Giro (Checking)
-INSERT OR IGNORE INTO interest_rates (product_type, product_name, rate_type, base_rate, min_balance, effective_date) VALUES
-('checking', 'Giro Rupiah', 'fixed', 0.50, 0, '2026-01-01');
+INSERT INTO interest_rates (product_type, product_name, rate_type, base_rate, min_balance, effective_date) VALUES
+('checking', 'Giro Rupiah', 'fixed', 0.50, 0, '2026-01-01')
+ON CONFLICT DO NOTHING;
 
 -- Deposito (Time Deposit)
-INSERT OR IGNORE INTO interest_rates (product_type, product_name, rate_type, base_rate, tenor_months, effective_date) VALUES
+INSERT INTO interest_rates (product_type, product_name, rate_type, base_rate, tenor_months, effective_date) VALUES
 ('deposit', 'Deposito 1 Bulan', 'fixed', 3.00, 1, '2026-01-01'),
 ('deposit', 'Deposito 3 Bulan', 'fixed', 3.50, 3, '2026-01-01'),
 ('deposit', 'Deposito 6 Bulan', 'fixed', 4.00, 6, '2026-01-01'),
 ('deposit', 'Deposito 12 Bulan', 'fixed', 4.50, 12, '2026-01-01'),
-('deposit', 'Deposito 24 Bulan', 'fixed', 5.00, 24, '2026-01-01');
+('deposit', 'Deposito 24 Bulan', 'fixed', 5.00, 24, '2026-01-01')
+ON CONFLICT DO NOTHING;
 
 -- Kredit (Loan)
-INSERT OR IGNORE INTO interest_rates (product_type, product_name, rate_type, base_rate, effective_date) VALUES
+INSERT INTO interest_rates (product_type, product_name, rate_type, base_rate, effective_date) VALUES
 ('loan', 'KPR Fixed 5 Tahun', 'fixed', 7.50, '2026-01-01'),
 ('loan', 'Kredit Modal Kerja', 'floating', 9.00, '2026-01-01'),
 ('loan', 'Kredit Konsumsi', 'fixed', 10.50, '2026-01-01'),
 ('loan', 'Kredit Mikro/UMKM', 'fixed', 6.00, '2026-01-01'),
-('loan', 'Kredit Investasi', 'floating', 8.50, '2026-01-01');
+('loan', 'Kredit Investasi', 'floating', 8.50, '2026-01-01')
+ON CONFLICT DO NOTHING;
 
 -- =============================================
 -- CIF EXTENDED DATA FOR EXISTING CUSTOMERS
 -- =============================================
-INSERT OR IGNORE INTO customer_extended (cif, mother_maiden_name, nationality, occupation, employer_name, monthly_income, source_of_funds, risk_profile, segment, branch_code, npwp) VALUES
+INSERT INTO customer_extended (cif, mother_maiden_name, nationality, occupation, employer_name, monthly_income, source_of_funds, risk_profile, segment, branch_code, npwp) VALUES
 ('CIF001', 'Sari Dewi', 'WNI', 'Software Engineer', 'PT Telkom Indonesia', 25000000, 'Gaji', 'low', 'affluent', 'JKT001', '12.345.678.9-012.000'),
 ('CIF002', 'Aminah', 'WNI', 'Dokter', 'RS Pondok Indah', 35000000, 'Gaji', 'low', 'priority', 'JKT002', '23.456.789.0-123.000'),
 ('CIF003', 'Fatimah', 'WNI', 'Pengusaha', 'CV Wijaya Mandiri', 50000000, 'Usaha', 'medium', 'priority', 'JKT003', '34.567.890.1-234.000'),
 ('CIF004', 'Kartini', 'WNI', 'Guru', 'SDN 01 Jakarta', 8000000, 'Gaji', 'low', 'mass', 'JKT004', '45.678.901.2-345.000'),
-('CIF005', 'Ratna', 'WNI', 'Wiraswasta', 'Toko Pratama', 15000000, 'Usaha', 'medium', 'mass', 'JKT005', '56.789.012.3-456.000');
+('CIF005', 'Ratna', 'WNI', 'Wiraswasta', 'Toko Pratama', 15000000, 'Usaha', 'medium', 'mass', 'JKT005', '56.789.012.3-456.000')
+ON CONFLICT DO NOTHING;

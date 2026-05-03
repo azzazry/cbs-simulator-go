@@ -15,12 +15,11 @@ type TransferRequest struct {
 	Amount              float64 `json:"amount"`
 	Description         string  `json:"description"`
 	TransferType        string  `json:"transfer_type"` // intra, inter, rtgs, skn
-	DestinationBankCode string  `json:"destination_bank_code"`  // For interbank transfers (required for inter)
+	DestinationBankCode string  `json:"destination_bank_code"` // For interbank transfers
 }
 
 // ProcessIntraBankTransfer processes intrabank transfer (within same bank)
 func ProcessIntraBankTransfer(req TransferRequest) (*models.Transaction, error) {
-	// Validate accounts
 	fromAccount, err := GetAccountBalance(req.FromAccountNumber)
 	if err != nil {
 		return nil, fmt.Errorf("source account not found: %v", err)
@@ -39,63 +38,54 @@ func ProcessIntraBankTransfer(req TransferRequest) (*models.Transaction, error) 
 		return nil, fmt.Errorf("destination account is not active")
 	}
 
-	// Check balance
 	if fromAccount.AvailBalance < req.Amount {
 		return nil, fmt.Errorf("insufficient balance")
 	}
 
-	// Start transaction
 	tx, err := database.DB.Begin()
 	if err != nil {
 		return nil, err
 	}
 	defer tx.Rollback()
 
-	// Debit from source account
-	_, err = tx.Exec(`UPDATE accounts SET balance = balance - ?, avail_balance = avail_balance - ?, 
-	                  updated_at = CURRENT_TIMESTAMP WHERE account_number = ?`,
+	_, err = tx.Exec(`UPDATE accounts SET balance = balance - $1, avail_balance = avail_balance - $2,
+	                  updated_at = NOW() WHERE account_number = $3`,
 		req.Amount, req.Amount, req.FromAccountNumber)
 	if err != nil {
 		return nil, err
 	}
 
-	// Credit to destination account
-	_, err = tx.Exec(`UPDATE accounts SET balance = balance + ?, avail_balance = avail_balance + ?, 
-	                  updated_at = CURRENT_TIMESTAMP WHERE account_number = ?`,
+	_, err = tx.Exec(`UPDATE accounts SET balance = balance + $1, avail_balance = avail_balance + $2,
+	                  updated_at = NOW() WHERE account_number = $3`,
 		req.Amount, req.Amount, req.ToAccountNumber)
 	if err != nil {
 		return nil, err
 	}
 
-	// Create transaction record
 	transactionID := utils.GenerateTransactionID()
 	referenceNumber := utils.GenerateReferenceNumber()
 	settlementDate := utils.GetCurrentDate()
 
-	result, err := tx.Exec(`INSERT INTO transactions (transaction_id, transaction_type, 
-	                        from_account_number, to_account_number, amount, currency, 
-	                        description, reference_number, status, settlement_date, fee) 
-	                        VALUES (?, 'transfer_intra', ?, ?, ?, 'IDR', ?, ?, 'success', ?, 0.00)`,
+	var trxID int64
+	err = tx.QueryRow(`INSERT INTO transactions (transaction_id, transaction_type,
+	                   from_account_number, to_account_number, amount, currency,
+	                   description, reference_number, status, settlement_date, fee)
+	                   VALUES ($1, 'transfer_intra', $2, $3, $4, 'IDR', $5, $6, 'success', $7, 0.00)
+	                   RETURNING id`,
 		transactionID, req.FromAccountNumber, req.ToAccountNumber, req.Amount,
-		req.Description, referenceNumber, settlementDate)
-
+		req.Description, referenceNumber, settlementDate).Scan(&trxID)
 	if err != nil {
 		return nil, err
 	}
 
-	// Commit transaction
 	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
 
-	// Simulate processing delay
 	utils.SimulateDelay(500)
 
-	// Retrieve transaction
-	trxID, _ := result.LastInsertId()
 	transaction, _ := GetTransactionByID(int(trxID))
 
-	// Trigger notifications for sender and receiver
 	fromCIF, _ := GetCIFByAccountNumber(req.FromAccountNumber)
 	toCIF, _ := GetCIFByAccountNumber(req.ToAccountNumber)
 
@@ -119,10 +109,7 @@ func ProcessIntraBankTransfer(req TransferRequest) (*models.Transaction, error) 
 }
 
 // ProcessInterBankTransfer processes interbank transfer (to other banks)
-// This is an OUTBOUND transfer from our bank to another bank
-// Fee is charged to the customer sending money OUT
 func ProcessInterBankTransfer(req TransferRequest) (*models.Transaction, error) {
-	// Validate source account
 	fromAccount, err := GetAccountBalance(req.FromAccountNumber)
 	if err != nil {
 		return nil, fmt.Errorf("source account not found: %v", err)
@@ -132,69 +119,58 @@ func ProcessInterBankTransfer(req TransferRequest) (*models.Transaction, error) 
 		return nil, fmt.Errorf("source account is not active")
 	}
 
-	// Destination bank code must be provided for interbank transfers
 	if req.DestinationBankCode == "" {
 		return nil, fmt.Errorf("destination_bank_code is required for interbank transfers")
 	}
 
-	destinationBankCode := req.DestinationBankCode
-	fee, err := CalculateTransferFee(destinationBankCode, req.Amount)
+	fee, err := CalculateTransferFee(req.DestinationBankCode, req.Amount)
 	if err != nil {
-		// Fall back to default fee if calculation fails
 		fee = 5000.00
 	}
 
 	totalAmount := req.Amount + fee
 
-	// Check balance
 	if fromAccount.AvailBalance < totalAmount {
 		return nil, fmt.Errorf("insufficient balance (transfer: %.0f + fee: %.0f = %.0f)", req.Amount, fee, totalAmount)
 	}
 
-	// Start transaction
 	tx, err := database.DB.Begin()
 	if err != nil {
 		return nil, err
 	}
 	defer tx.Rollback()
 
-	// Debit from source account (amount + fee)
-	_, err = tx.Exec(`UPDATE accounts SET balance = balance - ?, avail_balance = avail_balance - ?, 
-	                  updated_at = CURRENT_TIMESTAMP WHERE account_number = ?`,
+	_, err = tx.Exec(`UPDATE accounts SET balance = balance - $1, avail_balance = avail_balance - $2,
+	                  updated_at = NOW() WHERE account_number = $3`,
 		totalAmount, totalAmount, req.FromAccountNumber)
 	if err != nil {
 		return nil, err
 	}
 
-	// Create transaction record
 	transactionID := utils.GenerateTransactionID()
 	referenceNumber := utils.GenerateReferenceNumber()
 	settlementDate := utils.GetCurrentDate()
 
-	result, err := tx.Exec(`INSERT INTO transactions (transaction_id, transaction_type, 
-	                        from_account_number, to_account_number, amount, currency, 
-	                        description, reference_number, status, settlement_date, fee) 
-	                        VALUES (?, ?, ?, ?, ?, 'IDR', ?, ?, 'success', ?, ?)`,
+	var trxID int64
+	err = tx.QueryRow(`INSERT INTO transactions (transaction_id, transaction_type,
+	                   from_account_number, to_account_number, amount, currency,
+	                   description, reference_number, status, settlement_date, fee)
+	                   VALUES ($1, $2, $3, $4, $5, 'IDR', $6, $7, 'success', $8, $9)
+	                   RETURNING id`,
 		transactionID, "transfer_inter", req.FromAccountNumber, req.ToAccountNumber,
-		req.Amount, req.Description, referenceNumber, settlementDate, fee)
-
+		req.Amount, req.Description, referenceNumber, settlementDate, fee).Scan(&trxID)
 	if err != nil {
 		return nil, err
 	}
 
-	// Commit transaction
 	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
 
-	// Simulate processing delay (longer for interbank)
 	utils.SimulateDelay(1000)
 
-	// Retrieve transaction
-	trxID, _ := result.LastInsertId()
 	transaction, _ := GetTransactionByID(int(trxID))
 
-	// Trigger notification for sender
 	fromCIF, _ := GetCIFByAccountNumber(req.FromAccountNumber)
 	if fromCIF != "" {
 		SaveNotification(fromCIF, "transfer", "Transfer Antar Bank Berhasil",
@@ -211,10 +187,10 @@ func ProcessInterBankTransfer(req TransferRequest) (*models.Transaction, error) 
 func GetTransactionByID(id int) (*models.Transaction, error) {
 	var trx models.Transaction
 
-	query := `SELECT id, transaction_id, transaction_type, from_account_number, 
-	          to_account_number, amount, currency, description, reference_number, 
-	          status, transaction_date, settlement_date, fee, created_at 
-	          FROM transactions WHERE id = ?`
+	query := `SELECT id, transaction_id, transaction_type, from_account_number,
+	          to_account_number, amount, currency, description, reference_number,
+	          status, transaction_date, settlement_date, fee, created_at
+	          FROM transactions WHERE id = $1`
 
 	err := database.DB.QueryRow(query, id).Scan(
 		&trx.ID, &trx.TransactionID, &trx.TransactionType,
@@ -231,14 +207,14 @@ func GetTransactionByID(id int) (*models.Transaction, error) {
 	return &trx, nil
 }
 
-// GetTransactionByTransactionID retrieves transaction by transaction ID
+// GetTransactionByTransactionID retrieves transaction by transaction ID string
 func GetTransactionByTransactionID(transactionID string) (*models.Transaction, error) {
 	var trx models.Transaction
 
-	query := `SELECT id, transaction_id, transaction_type, from_account_number, 
-	          to_account_number, amount, currency, description, reference_number, 
-	          status, transaction_date, settlement_date, fee, created_at 
-	          FROM transactions WHERE transaction_id = ?`
+	query := `SELECT id, transaction_id, transaction_type, from_account_number,
+	          to_account_number, amount, currency, description, reference_number,
+	          status, transaction_date, settlement_date, fee, created_at
+	          FROM transactions WHERE transaction_id = $1`
 
 	err := database.DB.QueryRow(query, transactionID).Scan(
 		&trx.ID, &trx.TransactionID, &trx.TransactionType,
@@ -258,7 +234,7 @@ func GetTransactionByTransactionID(transactionID string) (*models.Transaction, e
 // GetCIFByAccountNumber retrieves CIF from account number
 func GetCIFByAccountNumber(accountNumber string) (string, error) {
 	var cif string
-	err := database.DB.QueryRow(`SELECT cif FROM accounts WHERE account_number = ?`, accountNumber).Scan(&cif)
+	err := database.DB.QueryRow(`SELECT cif FROM accounts WHERE account_number = $1`, accountNumber).Scan(&cif)
 	if err != nil {
 		return "", err
 	}

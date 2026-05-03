@@ -24,33 +24,28 @@ type CreateSIRequest struct {
 
 // CreateStandingInstruction creates a new recurring payment instruction
 func CreateStandingInstruction(req CreateSIRequest) (*models.StandingInstruction, error) {
-	// Validate frequency
 	validFreqs := map[string]bool{"daily": true, "weekly": true, "monthly": true, "quarterly": true}
 	if !validFreqs[req.Frequency] {
 		return nil, fmt.Errorf("invalid frequency: %s (must be daily, weekly, monthly, quarterly)", req.Frequency)
 	}
 
-	// Validate account exists
 	var accountCount int
-	database.DB.QueryRow(`SELECT COUNT(*) FROM accounts WHERE account_number = ? AND cif = ? AND status = 'active'`,
+	database.DB.QueryRow(`SELECT COUNT(*) FROM accounts WHERE account_number = $1 AND cif = $2 AND status = 'active'`,
 		req.FromAccount, req.CIF).Scan(&accountCount)
 	if accountCount == 0 {
 		return nil, fmt.Errorf("source account not found or inactive")
 	}
 
-	// Generate SI number
 	siNumber := fmt.Sprintf("SI-%s-%06d", time.Now().UTC().Format("20060102"), time.Now().UnixNano()%1000000)
-
-	// Calculate next execution date
 	nextExec := req.StartDate
 	if req.ExecutionDay == 0 {
 		req.ExecutionDay = 1
 	}
 
-	query := `INSERT INTO standing_instructions 
+	query := `INSERT INTO standing_instructions
 	          (si_number, cif, from_account, instruction_type, to_account, to_bank_code, amount, description,
 	           frequency, execution_day, start_date, end_date, next_execution_date, status)
-	          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active')`
+	          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, 'active')`
 
 	var endDate interface{} = nil
 	if req.EndDate != "" {
@@ -80,8 +75,8 @@ func CreateStandingInstruction(req CreateSIRequest) (*models.StandingInstruction
 // ExecutePendingSI executes all standing instructions due on the given date
 func ExecutePendingSI(date string) (int, int, error) {
 	rows, err := database.DB.Query(`SELECT si_number, cif, from_account, instruction_type, to_account, to_bank_code, amount, description, frequency, execution_day
-	                                 FROM standing_instructions 
-	                                 WHERE status = 'active' AND next_execution_date <= ?`, date)
+	                                 FROM standing_instructions
+	                                 WHERE status = 'active' AND next_execution_date <= $1`, date)
 	if err != nil {
 		return 0, 0, err
 	}
@@ -94,35 +89,30 @@ func ExecutePendingSI(date string) (int, int, error) {
 		rows.Scan(&si.SINumber, &si.CIF, &si.FromAccount, &si.InstructionType,
 			&si.ToAccount, &si.ToBankCode, &si.Amount, &si.Description, &si.Frequency, &si.ExecutionDay)
 
-		// Try to execute the instruction
 		txID := fmt.Sprintf("SI-%s-%s", si.SINumber, date)
 		execStatus := "success"
 		var errMsg string
 
-		// Check balance
 		var balance float64
-		database.DB.QueryRow(`SELECT avail_balance FROM accounts WHERE account_number = ?`, si.FromAccount).Scan(&balance)
+		database.DB.QueryRow(`SELECT avail_balance FROM accounts WHERE account_number = $1`, si.FromAccount).Scan(&balance)
 
 		if balance < si.Amount {
 			execStatus = "failed"
 			errMsg = "insufficient balance"
 			failed++
 		} else {
-			// Execute transfer
-			_, err := database.DB.Exec(`UPDATE accounts SET balance = balance - ?, avail_balance = avail_balance - ?, updated_at = CURRENT_TIMESTAMP 
-			                            WHERE account_number = ?`, si.Amount, si.Amount, si.FromAccount)
+			_, err := database.DB.Exec(`UPDATE accounts SET balance = balance - $1, avail_balance = avail_balance - $2, updated_at = NOW()
+			                            WHERE account_number = $3`, si.Amount, si.Amount, si.FromAccount)
 			if err != nil {
 				execStatus = "failed"
 				errMsg = err.Error()
 				failed++
 			} else {
-				// Credit to target if intra-bank
 				if si.ToAccount != "" && si.ToBankCode == "" {
-					database.DB.Exec(`UPDATE accounts SET balance = balance + ?, avail_balance = avail_balance + ?, updated_at = CURRENT_TIMESTAMP 
-					                  WHERE account_number = ?`, si.Amount, si.Amount, si.ToAccount)
+					database.DB.Exec(`UPDATE accounts SET balance = balance + $1, avail_balance = avail_balance + $2, updated_at = NOW()
+					                  WHERE account_number = $3`, si.Amount, si.Amount, si.ToAccount)
 				}
 
-				// GL entry
 				today := time.Now().UTC().Format("2006-01-02")
 				CreateJournalEntry(today, fmt.Sprintf("SI execution %s: %s", si.SINumber, si.Description),
 					"si_transfer", txID, "SYSTEM", []JournalLineInput{
@@ -134,17 +124,15 @@ func ExecutePendingSI(date string) (int, int, error) {
 			}
 		}
 
-		// Record execution
 		database.DB.Exec(`INSERT INTO si_executions (si_number, execution_date, amount, transaction_id, status, error_message)
-		                  VALUES (?, ?, ?, ?, ?, ?)`, si.SINumber, date, si.Amount, txID, execStatus, errMsg)
+		                  VALUES ($1, $2, $3, $4, $5, $6)`, si.SINumber, date, si.Amount, txID, execStatus, errMsg)
 
-		// Update SI record
 		nextExec := calculateNextExecution(date, si.Frequency, si.ExecutionDay)
 		if execStatus == "success" {
-			database.DB.Exec(`UPDATE standing_instructions SET total_executed = total_executed + 1, last_execution_date = ?, last_status = ?, next_execution_date = ? WHERE si_number = ?`,
+			database.DB.Exec(`UPDATE standing_instructions SET total_executed = total_executed + 1, last_execution_date = $1, last_status = $2, next_execution_date = $3 WHERE si_number = $4`,
 				date, execStatus, nextExec, si.SINumber)
 		} else {
-			database.DB.Exec(`UPDATE standing_instructions SET total_failed = total_failed + 1, last_execution_date = ?, last_status = ?, next_execution_date = ? WHERE si_number = ?`,
+			database.DB.Exec(`UPDATE standing_instructions SET total_failed = total_failed + 1, last_execution_date = $1, last_status = $2, next_execution_date = $3 WHERE si_number = $4`,
 				date, execStatus, nextExec, si.SINumber)
 		}
 	}
@@ -152,7 +140,6 @@ func ExecutePendingSI(date string) (int, int, error) {
 	return success, failed, nil
 }
 
-// calculateNextExecution computes the next execution date based on frequency
 func calculateNextExecution(currentDate, frequency string, executionDay int) string {
 	t, err := time.Parse("2006-01-02", currentDate)
 	if err != nil {
@@ -184,7 +171,7 @@ func GetSIByCIF(cif string) ([]models.StandingInstruction, error) {
 	rows, err := database.DB.Query(`SELECT id, si_number, cif, from_account, instruction_type, to_account, to_bank_code,
 	                                 amount, description, frequency, execution_day, start_date, end_date,
 	                                 next_execution_date, total_executed, total_failed, last_execution_date, last_status, status, created_at
-	                                 FROM standing_instructions WHERE cif = ? ORDER BY created_at DESC`, cif)
+	                                 FROM standing_instructions WHERE cif = $1 ORDER BY created_at DESC`, cif)
 	if err != nil {
 		return nil, err
 	}
@@ -204,49 +191,45 @@ func GetSIByCIF(cif string) ([]models.StandingInstruction, error) {
 	return instructions, nil
 }
 
-// PauseSI pauses a standing instruction
 func PauseSI(siNumber string) error {
-	result, err := database.DB.Exec(`UPDATE standing_instructions SET status = 'paused' WHERE si_number = ? AND status = 'active'`, siNumber)
+	result, err := database.DB.Exec(`UPDATE standing_instructions SET status = 'paused' WHERE si_number = $1 AND status = 'active'`, siNumber)
 	if err != nil {
 		return err
 	}
-	rows, _ := result.RowsAffected()
-	if rows == 0 {
+	rowsAff, _ := result.RowsAffected()
+	if rowsAff == 0 {
 		return fmt.Errorf("standing instruction not found or not active")
 	}
 	return nil
 }
 
-// ResumeSI resumes a paused standing instruction
 func ResumeSI(siNumber string) error {
-	result, err := database.DB.Exec(`UPDATE standing_instructions SET status = 'active' WHERE si_number = ? AND status = 'paused'`, siNumber)
+	result, err := database.DB.Exec(`UPDATE standing_instructions SET status = 'active' WHERE si_number = $1 AND status = 'paused'`, siNumber)
 	if err != nil {
 		return err
 	}
-	rows, _ := result.RowsAffected()
-	if rows == 0 {
+	rowsAff, _ := result.RowsAffected()
+	if rowsAff == 0 {
 		return fmt.Errorf("standing instruction not found or not paused")
 	}
 	return nil
 }
 
-// CancelSI cancels a standing instruction
 func CancelSI(siNumber string) error {
-	result, err := database.DB.Exec(`UPDATE standing_instructions SET status = 'cancelled' WHERE si_number = ? AND status IN ('active', 'paused')`, siNumber)
+	result, err := database.DB.Exec(`UPDATE standing_instructions SET status = 'cancelled' WHERE si_number = $1 AND status IN ('active', 'paused')`, siNumber)
 	if err != nil {
 		return err
 	}
-	rows, _ := result.RowsAffected()
-	if rows == 0 {
+	rowsAff, _ := result.RowsAffected()
+	if rowsAff == 0 {
 		return fmt.Errorf("standing instruction not found or already cancelled")
 	}
 	return nil
 }
 
-// GetSIExecutionHistory returns execution history for a standing instruction
 func GetSIExecutionHistory(siNumber string) ([]models.SIExecution, error) {
 	rows, err := database.DB.Query(`SELECT id, si_number, execution_date, amount, transaction_id, status, error_message, created_at
-	                                 FROM si_executions WHERE si_number = ? ORDER BY execution_date DESC`, siNumber)
+	                                 FROM si_executions WHERE si_number = $1 ORDER BY execution_date DESC`, siNumber)
 	if err != nil {
 		return nil, err
 	}

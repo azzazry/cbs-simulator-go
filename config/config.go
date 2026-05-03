@@ -10,12 +10,12 @@ import (
 
 type Config struct {
 	// Server
-	ServerPort   string
-	DatabasePath string
-	Environment  string
+	ServerPort  string
+	DatabaseDSN string // PostgreSQL DSN
+	Environment string
 
 	// JWT
-	JWTSecret       string
+	JWTSecret        string
 	JWTAccessExpiry  int // minutes
 	JWTRefreshExpiry int // hours
 
@@ -41,12 +41,12 @@ func LoadConfig() {
 
 	AppConfig = &Config{
 		// Server
-		ServerPort:   getEnv("SERVER_PORT", "8080"),
-		DatabasePath: getEnv("DATABASE_PATH", "./database/cbs.db"),
-		Environment:  getEnv("ENVIRONMENT", "development"),
+		ServerPort:  getEnv("SERVER_PORT", "8080"),
+		DatabaseDSN: getEnv("DATABASE_DSN", "postgres://postgres:postgres@localhost:5432/cbs_simulator?sslmode=disable"),
+		Environment: getEnv("ENVIRONMENT", "development"),
 
 		// JWT
-		JWTSecret:       getEnv("JWT_SECRET", "cbs-simulator-secret-key-change-in-production"),
+		JWTSecret:        getEnv("JWT_SECRET", "cbs-simulator-secret-key-change-in-production"),
 		JWTAccessExpiry:  getEnvInt("JWT_ACCESS_EXPIRY_MINUTES", 15),
 		JWTRefreshExpiry: getEnvInt("JWT_REFRESH_EXPIRY_HOURS", 168), // 7 days
 
@@ -64,8 +64,8 @@ func LoadConfig() {
 		OTPLength: getEnvInt("OTP_LENGTH", 6),
 	}
 
-	log.Printf("Configuration loaded: Port=%s, DB=%s, Env=%s",
-		AppConfig.ServerPort, AppConfig.DatabasePath, AppConfig.Environment)
+	log.Printf("Configuration loaded: Port=%s, DB=<dsn>, Env=%s",
+		AppConfig.ServerPort, AppConfig.Environment)
 }
 
 func getEnv(key, defaultValue string) string {

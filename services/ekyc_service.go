@@ -29,10 +29,8 @@ func VerifyEKYC(req EKYCVerifyRequest) (*EKYCVerifyResponse, error) {
 		req.VerificationType = "unlock_account"
 	}
 
-	// Verify customer exists
-	var storedIDCard string
-	var fullName string
-	query := `SELECT id_card_number, full_name FROM customers WHERE cif = ?`
+	var storedIDCard, fullName string
+	query := `SELECT id_card_number, full_name FROM customers WHERE cif = $1`
 	err := database.DB.QueryRow(query, req.CIF).Scan(&storedIDCard, &fullName)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -41,7 +39,6 @@ func VerifyEKYC(req EKYCVerifyRequest) (*EKYCVerifyResponse, error) {
 		return nil, fmt.Errorf("failed to verify customer: %v", err)
 	}
 
-	// Match ID card number (simulate e-KYC: in production this would involve OCR, face match, etc.)
 	verificationID := fmt.Sprintf("EKYC-%s", uuid.New().String()[:12])
 	status := "rejected"
 	message := "ID card number does not match our records"
@@ -51,9 +48,9 @@ func VerifyEKYC(req EKYCVerifyRequest) (*EKYCVerifyResponse, error) {
 		message = fmt.Sprintf("e-KYC verification successful for %s", fullName)
 	}
 
-	// Record verification attempt
-	insertQuery := `INSERT INTO ekyc_verifications (verification_id, cif, id_card_number, verification_type, verification_status, verified_at) 
-	                VALUES (?, ?, ?, ?, ?, CASE WHEN ? = 'verified' THEN CURRENT_TIMESTAMP ELSE NULL END)`
+	// PostgreSQL: gunakan CASE WHEN untuk verified_at
+	insertQuery := `INSERT INTO ekyc_verifications (verification_id, cif, id_card_number, verification_type, verification_status, verified_at)
+	                VALUES ($1, $2, $3, $4, $5, CASE WHEN $6 = 'verified' THEN NOW() ELSE NULL END)`
 	_, err = database.DB.Exec(insertQuery, verificationID, req.CIF, req.IDCardNumber, req.VerificationType, status, status)
 	if err != nil {
 		return nil, fmt.Errorf("failed to record e-KYC verification: %v", err)
@@ -73,8 +70,8 @@ func VerifyEKYC(req EKYCVerifyRequest) (*EKYCVerifyResponse, error) {
 // GetEKYCVerification retrieves a verification by ID
 func GetEKYCVerification(verificationID string) (*models.EKYCVerification, error) {
 	var v models.EKYCVerification
-	query := `SELECT id, verification_id, cif, id_card_number, verification_type, verification_status, verified_at, created_at 
-	          FROM ekyc_verifications WHERE verification_id = ?`
+	query := `SELECT id, verification_id, cif, id_card_number, verification_type, verification_status, verified_at, created_at
+	          FROM ekyc_verifications WHERE verification_id = $1`
 	err := database.DB.QueryRow(query, verificationID).Scan(
 		&v.ID, &v.VerificationID, &v.CIF, &v.IDCardNumber,
 		&v.VerificationType, &v.VerificationStatus, &v.VerifiedAt, &v.CreatedAt)

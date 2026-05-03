@@ -9,9 +9,9 @@ import (
 
 // GetAllBanks retrieves all active banks
 func GetAllBanks() ([]models.Bank, error) {
-	query := `SELECT id, bank_code, bank_name, swift_code, is_active, created_at, updated_at 
-	          FROM banks WHERE is_active = 1 ORDER BY bank_name ASC`
-	
+	query := `SELECT id, bank_code, bank_name, swift_code, is_active, created_at, updated_at
+	          FROM banks WHERE is_active = TRUE ORDER BY bank_name ASC`
+
 	rows, err := database.DB.Query(query)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query banks: %w", err)
@@ -37,14 +37,14 @@ func GetAllBanks() ([]models.Bank, error) {
 
 // GetBankByCode retrieves a single bank by code
 func GetBankByCode(bankCode string) (*models.Bank, error) {
-	query := `SELECT id, bank_code, bank_name, swift_code, is_active, created_at, updated_at 
-	          FROM banks WHERE bank_code = ? AND is_active = 1`
-	
+	query := `SELECT id, bank_code, bank_name, swift_code, is_active, created_at, updated_at
+	          FROM banks WHERE bank_code = $1 AND is_active = TRUE`
+
 	var bank models.Bank
 	err := database.DB.QueryRow(query, bankCode).Scan(
 		&bank.ID, &bank.BankCode, &bank.BankName, &bank.SwiftCode, &bank.IsActive, &bank.CreatedAt, &bank.UpdatedAt,
 	)
-	
+
 	if err != nil {
 		return nil, fmt.Errorf("bank %s not found: %w", bankCode, err)
 	}
@@ -58,15 +58,11 @@ func ValidateBank(bankCode string) bool {
 	return err == nil
 }
 
-// GetBankCodeFromAccountNumber extracts bank code from account number (first 3-4 digits)
-// This is a simplified version; real implementation may differ based on your account numbering scheme
+// GetBankCodeFromAccountNumber extracts bank code from account number
 func GetBankCodeFromAccountNumber(accountNumber string) (string, error) {
 	if len(accountNumber) < 3 {
 		return "", errors.New("invalid account number format")
 	}
-
-	// For now, assume all intra-bank transfers are to our bank (MANDIRI)
-	// In a real scenario, you'd map account prefixes to bank codes
 	return "MANDIRI", nil
 }
 
@@ -76,7 +72,6 @@ func GetBankByAccountNumber(accountNumber string) (*models.Bank, error) {
 	if err != nil {
 		return nil, err
 	}
-
 	return GetBankByCode(bankCode)
 }
 

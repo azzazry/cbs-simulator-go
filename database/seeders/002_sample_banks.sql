@@ -1,7 +1,7 @@
 -- CBS Simulator Sample Banks Data
 -- Insert major Indonesian banks for testing
 
-INSERT OR IGNORE INTO banks (bank_code, bank_name, swift_code, is_active) VALUES
+INSERT INTO banks (bank_code, bank_name, swift_code, is_active) VALUES
     ('MANDIRI', 'Bank Mandiri', 'BMRIIDJA', 1),
     ('BCA', 'Bank BCA', 'BCAIDJA', 1),
     ('BRI', 'Bank BRI', 'BRINIDJA', 1),
@@ -20,4 +20,5 @@ INSERT OR IGNORE INTO banks (bank_code, bank_name, swift_code, is_active) VALUES
     ('CITIBANK', 'Citibank Indonesia', 'CITAIDJA', 1),
     ('HSBC', 'HSBC Bank Indonesia', 'HSBCIDJA', 1),
     ('MIZUHO', 'Bank Mizuho Indonesia', 'MHCBIDJA', 1),
-    ('JPMORGAN', 'JP Morgan Chase', 'CHASUS33', 1);
+    ('JPMORGAN', 'JP Morgan Chase', 'CHASUS33', 1)
+ON CONFLICT DO NOTHING;

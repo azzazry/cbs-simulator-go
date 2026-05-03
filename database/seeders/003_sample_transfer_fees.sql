@@ -4,7 +4,7 @@
 -- Transfer Fees: Fees for OUR bank → OTHER banks (OUTBOUND transfers)
 -- Intrabank transfers are FREE
 -- Incoming transfers from other banks are FREE (received by our customers)
-INSERT OR IGNORE INTO transfer_fees 
+INSERT INTO transfer_fees 
     (destination_bank_code, destination_bank_name, fee_type, fee_amount, description, notes) 
 VALUES
     -- Major Banks - Standard Domestic Fee (Rp 5,000)
@@ -28,10 +28,11 @@ VALUES
     ('CITIBANK', 'Citibank Indonesia', 'flat', 10000, 'Transfer to Citibank', 'SWIFT International'),
     ('HSBC', 'HSBC Bank Indonesia', 'flat', 10000, 'Transfer to HSBC', 'SWIFT International'),
     ('MIZUHO', 'Bank Mizuho Indonesia', 'flat', 10000, 'Transfer to Mizuho', 'SWIFT International'),
-    ('JPMORGAN', 'JP Morgan Chase', 'flat', 10000, 'Transfer to JP Morgan', 'SWIFT International');
+    ('JPMORGAN', 'JP Morgan Chase', 'flat', 10000, 'Transfer to JP Morgan', 'SWIFT International')
+ON CONFLICT DO NOTHING;
 
 -- Service Fees: Fees for other services (e-wallet, e-money, VA, QRIS)
-INSERT OR IGNORE INTO service_fees 
+INSERT INTO service_fees 
     (service_code, service_name, service_type, fee_type, fee_amount, notes) 
 VALUES
     ('TOPUP_OVO', 'Top Up OVO', 'topup_ewallet', 'flat', 2500, 'OVO e-wallet top up'),
@@ -42,4 +43,5 @@ VALUES
     ('PAYMENT_VA_MANDIRI', 'Payment Virtual Account Mandiri', 'payment_va', 'flat', 0, 'Virtual Account payment - Mandiri'),
     ('PAYMENT_VA_BCA', 'Payment Virtual Account BCA', 'payment_va', 'flat', 0, 'Virtual Account payment - BCA'),
     ('PAYMENT_VA_BRI', 'Payment Virtual Account BRI', 'payment_va', 'flat', 0, 'Virtual Account payment - BRI'),
-    ('QRIS_PAYMENT', 'QRIS Payment', 'qris_payment', 'percentage', 1, 'QRIS Payment - 1% charge');
+    ('QRIS_PAYMENT', 'QRIS Payment', 'qris_payment', 'percentage', 1, 'QRIS Payment - 1% charge')
+ON CONFLICT DO NOTHING;

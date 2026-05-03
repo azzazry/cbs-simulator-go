@@ -9,7 +9,6 @@ import (
 
 // GetSingleCustomerView returns a complete view of a customer
 func GetSingleCustomerView(cif string) (*models.SingleCustomerView, error) {
-	// Get base customer
 	customer, err := GetCustomerByCIF(cif)
 	if err != nil {
 		return nil, fmt.Errorf("customer not found: %v", err)
@@ -19,13 +18,11 @@ func GetSingleCustomerView(cif string) (*models.SingleCustomerView, error) {
 		Customer: *customer,
 	}
 
-	// Get extended data
 	ext, _ := GetCustomerExtended(cif)
 	view.Extended = ext
 
-	// Get accounts
-	rows, err := database.DB.Query(`SELECT id, account_number, cif, account_type, currency, balance, avail_balance, status, opened_date, branch 
-	                                 FROM accounts WHERE cif = ?`, cif)
+	rows, err := database.DB.Query(`SELECT id, account_number, cif, account_type, currency, balance, avail_balance, status, opened_date, branch
+	                                 FROM accounts WHERE cif = $1`, cif)
 	if err == nil {
 		defer rows.Close()
 		for rows.Next() {
@@ -36,10 +33,9 @@ func GetSingleCustomerView(cif string) (*models.SingleCustomerView, error) {
 		}
 	}
 
-	// Get loans
-	loanRows, err := database.DB.Query(`SELECT id, loan_number, cif, account_number, loan_type, principal_amount, outstanding_amount, 
-	                                     interest_rate, monthly_payment, tenor_months, remaining_months, disbursement_date, 
-	                                     maturity_date, next_payment_date, status FROM loans WHERE cif = ?`, cif)
+	loanRows, err := database.DB.Query(`SELECT id, loan_number, cif, account_number, loan_type, principal_amount, outstanding_amount,
+	                                     interest_rate, monthly_payment, tenor_months, remaining_months, disbursement_date,
+	                                     maturity_date, next_payment_date, status FROM loans WHERE cif = $1`, cif)
 	if err == nil {
 		defer loanRows.Close()
 		for loanRows.Next() {
@@ -52,10 +48,9 @@ func GetSingleCustomerView(cif string) (*models.SingleCustomerView, error) {
 		}
 	}
 
-	// Get deposits
 	depRows, err := database.DB.Query(`SELECT id, deposit_number, cif, principal_amount, interest_rate, tenor_months,
 	                                    open_date, maturity_date, maturity_amount, auto_renew, status, linked_account
-	                                    FROM deposits WHERE cif = ?`, cif)
+	                                    FROM deposits WHERE cif = $1`, cif)
 	if err == nil {
 		defer depRows.Close()
 		for depRows.Next() {
@@ -67,9 +62,8 @@ func GetSingleCustomerView(cif string) (*models.SingleCustomerView, error) {
 		}
 	}
 
-	// Get cards
-	cardRows, err := database.DB.Query(`SELECT id, card_number, cif, account_number, card_type, card_brand, 
-	                                     card_limit, avail_limit, expiry_date, status FROM cards WHERE cif = ?`, cif)
+	cardRows, err := database.DB.Query(`SELECT id, card_number, cif, account_number, card_type, card_brand,
+	                                     card_limit, avail_limit, expiry_date, status FROM cards WHERE cif = $1`, cif)
 	if err == nil {
 		defer cardRows.Close()
 		for cardRows.Next() {
@@ -80,7 +74,6 @@ func GetSingleCustomerView(cif string) (*models.SingleCustomerView, error) {
 		}
 	}
 
-	// Get roles
 	roles, _ := GetUserRoles(cif)
 	view.Roles = roles
 
@@ -92,7 +85,7 @@ func GetCustomerExtended(cif string) (*models.CustomerExtended, error) {
 	var ext models.CustomerExtended
 	query := `SELECT id, cif, mother_maiden_name, nationality, occupation, employer_name, monthly_income,
 	           source_of_funds, risk_profile, segment, branch_code, rm_code, npwp, last_kyc_date, next_kyc_date,
-	           created_at, updated_at FROM customer_extended WHERE cif = ?`
+	           created_at, updated_at FROM customer_extended WHERE cif = $1`
 
 	err := database.DB.QueryRow(query, cif).Scan(
 		&ext.ID, &ext.CIF, &ext.MotherMaidenName, &ext.Nationality, &ext.Occupation,
@@ -111,36 +104,33 @@ func GetCustomerExtended(cif string) (*models.CustomerExtended, error) {
 
 // UpdateCustomerExtended updates or inserts extended CIF data
 func UpdateCustomerExtended(cif string, ext models.CustomerExtended) error {
-	// Check if exists
 	existing, _ := GetCustomerExtended(cif)
 
 	if existing != nil {
-		// Update
-		query := `UPDATE customer_extended SET 
-		          mother_maiden_name=?, nationality=?, occupation=?, employer_name=?, monthly_income=?,
-		          source_of_funds=?, risk_profile=?, segment=?, branch_code=?, rm_code=?, npwp=?,
-		          updated_at=CURRENT_TIMESTAMP WHERE cif=?`
+		query := `UPDATE customer_extended SET
+		          mother_maiden_name=$1, nationality=$2, occupation=$3, employer_name=$4, monthly_income=$5,
+		          source_of_funds=$6, risk_profile=$7, segment=$8, branch_code=$9, rm_code=$10, npwp=$11,
+		          updated_at=NOW() WHERE cif=$12`
 		_, err := database.DB.Exec(query, ext.MotherMaidenName, ext.Nationality, ext.Occupation,
 			ext.EmployerName, ext.MonthlyIncome, ext.SourceOfFunds, ext.RiskProfile,
 			ext.Segment, ext.BranchCode, ext.RMCode, ext.NPWP, cif)
 		return err
 	}
 
-	// Insert
 	query := `INSERT INTO customer_extended (cif, mother_maiden_name, nationality, occupation, employer_name, monthly_income,
 	           source_of_funds, risk_profile, segment, branch_code, rm_code, npwp)
-	           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+	           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`
 	_, err := database.DB.Exec(query, cif, ext.MotherMaidenName, ext.Nationality, ext.Occupation,
 		ext.EmployerName, ext.MonthlyIncome, ext.SourceOfFunds, ext.RiskProfile,
 		ext.Segment, ext.BranchCode, ext.RMCode, ext.NPWP)
 	return err
 }
 
-// SearchCustomers searches by name, CIF, KTP, or phone
+// SearchCustomers searches by name, CIF, KTP, or phone — menggunakan ILIKE untuk case-insensitive
 func SearchCustomers(query string) ([]models.Customer, error) {
-	searchQuery := `SELECT id, cif, full_name, id_card_number, phone_number, email, address, date_of_birth, status 
-	                FROM customers 
-	                WHERE cif LIKE ? OR full_name LIKE ? OR id_card_number LIKE ? OR phone_number LIKE ?
+	searchQuery := `SELECT id, cif, full_name, id_card_number, phone_number, email, address, date_of_birth, status
+	                FROM customers
+	                WHERE cif ILIKE $1 OR full_name ILIKE $2 OR id_card_number ILIKE $3 OR phone_number ILIKE $4
 	                ORDER BY full_name LIMIT 20`
 
 	pattern := "%" + query + "%"

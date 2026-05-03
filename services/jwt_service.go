@@ -73,7 +73,7 @@ func GenerateTokenPair(cif, role string) (*TokenPair, error) {
 		return nil, fmt.Errorf("failed to sign refresh token: %v", err)
 	}
 
-	expiresIn := int64(config.AppConfig.JWTAccessExpiry * 60) // convert minutes to seconds
+	expiresIn := int64(config.AppConfig.JWTAccessExpiry * 60)
 
 	return &TokenPair{
 		AccessToken:  accessTokenString,
@@ -103,7 +103,6 @@ func ValidateToken(tokenString string) (*JWTClaims, error) {
 		return nil, fmt.Errorf("invalid token claims")
 	}
 
-	// Check if token is blacklisted
 	blacklisted, err := IsTokenBlacklisted(claims.ID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to check token blacklist: %v", err)
@@ -126,13 +125,15 @@ func RefreshAccessToken(refreshTokenString string) (*TokenPair, error) {
 		return nil, fmt.Errorf("token is not a refresh token")
 	}
 
-	// Generate new token pair
 	return GenerateTokenPair(claims.CIF, claims.Role)
 }
 
 // BlacklistToken adds a token to the blacklist (for logout)
+// INSERT OR IGNORE → INSERT ... ON CONFLICT DO NOTHING
 func BlacklistToken(jti, cif string, expiresAt time.Time) error {
-	query := `INSERT OR IGNORE INTO token_blacklist (token_jti, cif, expires_at) VALUES (?, ?, ?)`
+	query := `INSERT INTO token_blacklist (token_jti, cif, expires_at)
+	          VALUES ($1, $2, $3)
+	          ON CONFLICT (token_jti) DO NOTHING`
 	_, err := database.DB.Exec(query, jti, cif, expiresAt)
 	return err
 }
@@ -140,7 +141,7 @@ func BlacklistToken(jti, cif string, expiresAt time.Time) error {
 // IsTokenBlacklisted checks if a token JTI is in the blacklist
 func IsTokenBlacklisted(jti string) (bool, error) {
 	var count int
-	err := database.DB.QueryRow(`SELECT COUNT(*) FROM token_blacklist WHERE token_jti = ?`, jti).Scan(&count)
+	err := database.DB.QueryRow(`SELECT COUNT(*) FROM token_blacklist WHERE token_jti = $1`, jti).Scan(&count)
 	if err != nil {
 		return false, err
 	}
@@ -149,6 +150,6 @@ func IsTokenBlacklisted(jti string) (bool, error) {
 
 // CleanupExpiredBlacklistTokens removes expired tokens from the blacklist
 func CleanupExpiredBlacklistTokens() error {
-	_, err := database.DB.Exec(`DELETE FROM token_blacklist WHERE expires_at < ?`, time.Now())
+	_, err := database.DB.Exec(`DELETE FROM token_blacklist WHERE expires_at < $1`, time.Now())
 	return err
 }

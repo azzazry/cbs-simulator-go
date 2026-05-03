@@ -8,38 +8,34 @@ import (
 	"cbs-simulator/utils"
 )
 
-// QRISPaymentRequest represents QRIS payment request
 type QRISPaymentRequest struct {
 	FromAccountNumber string  `json:"from_account_number" binding:"required"`
 	MerchantName      string  `json:"merchant_name" binding:"required"`
 	Amount            float64 `json:"amount" binding:"required,min=1"`
 	Description       string  `json:"description"`
-	QRISCode          string  `json:"qris_code" binding:"required"` // Dynamic QRIS code
+	QRISCode          string  `json:"qris_code" binding:"required"`
 }
 
-// VAPaymentRequest represents Virtual Account payment request
 type VAPaymentRequest struct {
 	FromAccountNumber string  `json:"from_account_number" binding:"required"`
-	DestinationVACode string  `json:"destination_va_code" binding:"required"` // VA number/code
-	VABankCode        string  `json:"va_bank_code" binding:"required"`        // MANDIRI, BCA, BRI
+	DestinationVACode string  `json:"destination_va_code" binding:"required"`
+	VABankCode        string  `json:"va_bank_code" binding:"required"`
 	BeneficiaryName   string  `json:"beneficiary_name" binding:"required"`
 	Amount            float64 `json:"amount" binding:"required,min=1"`
 	Description       string  `json:"description"`
 }
 
-// EWalletTopupRequest represents e-wallet top-up request
 type EWalletTopupRequest struct {
 	FromAccountNumber string  `json:"from_account_number" binding:"required"`
-	EWalletProvider   string  `json:"ewallet_provider" binding:"required"` // OVO, DANA, GOPAY
+	EWalletProvider   string  `json:"ewallet_provider" binding:"required"`
 	PhoneNumber       string  `json:"phone_number" binding:"required"`
 	Amount            float64 `json:"amount" binding:"required,min=1"`
 	Description       string  `json:"description"`
 }
 
-// EMoneyTopupRequest represents e-money top-up request
 type EMoneyTopupRequest struct {
 	FromAccountNumber string  `json:"from_account_number" binding:"required"`
-	EMoneyProvider    string  `json:"emoney_provider" binding:"required"` // LINKAJA, MANDIRIEMONEY
+	EMoneyProvider    string  `json:"emoney_provider" binding:"required"`
 	CardNumber        string  `json:"card_number" binding:"required"`
 	Amount            float64 `json:"amount" binding:"required,min=1"`
 	Description       string  `json:"description"`
@@ -47,7 +43,6 @@ type EMoneyTopupRequest struct {
 
 // ProcessQRISPayment processes QRIS payment transaction
 func ProcessQRISPayment(req QRISPaymentRequest) (*models.Transaction, error) {
-	// Validate source account
 	fromAccount, err := GetAccountBalance(req.FromAccountNumber)
 	if err != nil {
 		return nil, fmt.Errorf("source account not found: %v", err)
@@ -57,63 +52,54 @@ func ProcessQRISPayment(req QRISPaymentRequest) (*models.Transaction, error) {
 		return nil, fmt.Errorf("source account is not active")
 	}
 
-	// Get QRIS fee (percentage: 1%)
 	fee, err := CalculateServiceFee("QRIS_PAYMENT", req.Amount)
 	if err != nil {
-		fee = (req.Amount * 1) / 100 // 1% fallback
+		fee = (req.Amount * 1) / 100
 	}
 
 	totalAmount := req.Amount + fee
 
-	// Check balance
 	if fromAccount.AvailBalance < totalAmount {
 		return nil, fmt.Errorf("insufficient balance (amount: %.0f + fee: %.0f = %.0f)", req.Amount, fee, totalAmount)
 	}
 
-	// Start transaction
 	tx, err := database.DB.Begin()
 	if err != nil {
 		return nil, err
 	}
 	defer tx.Rollback()
 
-	// Debit from source account (amount + fee)
-	_, err = tx.Exec(`UPDATE accounts SET balance = balance - ?, avail_balance = avail_balance - ?, 
-	                  updated_at = CURRENT_TIMESTAMP WHERE account_number = ?`,
+	_, err = tx.Exec(`UPDATE accounts SET balance = balance - $1, avail_balance = avail_balance - $2,
+	                  updated_at = NOW() WHERE account_number = $3`,
 		totalAmount, totalAmount, req.FromAccountNumber)
 	if err != nil {
 		return nil, err
 	}
 
-	// Create transaction record
 	transactionID := utils.GenerateTransactionID()
 	referenceNumber := utils.GenerateReferenceNumber()
 	settlementDate := utils.GetCurrentDate()
 
-	result, err := tx.Exec(`INSERT INTO transactions (transaction_id, transaction_type, 
-	                        from_account_number, to_account_number, amount, currency, 
-	                        description, reference_number, status, settlement_date, fee) 
-	                        VALUES (?, ?, ?, ?, ?, 'IDR', ?, ?, 'success', ?, ?)`,
+	var trxID int64
+	err = tx.QueryRow(`INSERT INTO transactions (transaction_id, transaction_type,
+	                   from_account_number, to_account_number, amount, currency,
+	                   description, reference_number, status, settlement_date, fee)
+	                   VALUES ($1, $2, $3, $4, $5, 'IDR', $6, $7, 'success', $8, $9)
+	                   RETURNING id`,
 		transactionID, "payment_qris", req.FromAccountNumber, req.QRISCode,
-		req.Amount, req.Description, referenceNumber, settlementDate, fee)
-
+		req.Amount, req.Description, referenceNumber, settlementDate, fee).Scan(&trxID)
 	if err != nil {
 		return nil, err
 	}
 
-	// Commit transaction
 	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
 
-	// Simulate processing delay
 	utils.SimulateDelay(800)
 
-	// Retrieve transaction
-	trxID, _ := result.LastInsertId()
 	transaction, _ := GetTransactionByID(int(trxID))
 
-	// Trigger notification for sender
 	fromCIF, _ := GetCIFByAccountNumber(req.FromAccountNumber)
 	if fromCIF != "" {
 		SaveNotification(fromCIF, "payment", "QRIS Payment Berhasil",
@@ -128,7 +114,6 @@ func ProcessQRISPayment(req QRISPaymentRequest) (*models.Transaction, error) {
 
 // ProcessVAPayment processes Virtual Account payment transaction
 func ProcessVAPayment(req VAPaymentRequest) (*models.Transaction, error) {
-	// Validate source account
 	fromAccount, err := GetAccountBalance(req.FromAccountNumber)
 	if err != nil {
 		return nil, fmt.Errorf("source account not found: %v", err)
@@ -138,60 +123,50 @@ func ProcessVAPayment(req VAPaymentRequest) (*models.Transaction, error) {
 		return nil, fmt.Errorf("source account is not active")
 	}
 
-	// Get VA fee (VA payments are usually FREE per bank policy)
 	fee := 0.0
-
 	totalAmount := req.Amount + fee
 
-	// Check balance
 	if fromAccount.AvailBalance < totalAmount {
 		return nil, fmt.Errorf("insufficient balance")
 	}
 
-	// Start transaction
 	tx, err := database.DB.Begin()
 	if err != nil {
 		return nil, err
 	}
 	defer tx.Rollback()
 
-	// Debit from source account
-	_, err = tx.Exec(`UPDATE accounts SET balance = balance - ?, avail_balance = avail_balance - ?, 
-	                  updated_at = CURRENT_TIMESTAMP WHERE account_number = ?`,
+	_, err = tx.Exec(`UPDATE accounts SET balance = balance - $1, avail_balance = avail_balance - $2,
+	                  updated_at = NOW() WHERE account_number = $3`,
 		totalAmount, totalAmount, req.FromAccountNumber)
 	if err != nil {
 		return nil, err
 	}
 
-	// Create transaction record
 	transactionID := utils.GenerateTransactionID()
 	referenceNumber := utils.GenerateReferenceNumber()
 	settlementDate := utils.GetCurrentDate()
 
-	result, err := tx.Exec(`INSERT INTO transactions (transaction_id, transaction_type, 
-	                        from_account_number, to_account_number, amount, currency, 
-	                        description, reference_number, status, settlement_date, fee) 
-	                        VALUES (?, ?, ?, ?, ?, 'IDR', ?, ?, 'success', ?, ?)`,
+	var trxID int64
+	err = tx.QueryRow(`INSERT INTO transactions (transaction_id, transaction_type,
+	                   from_account_number, to_account_number, amount, currency,
+	                   description, reference_number, status, settlement_date, fee)
+	                   VALUES ($1, $2, $3, $4, $5, 'IDR', $6, $7, 'success', $8, $9)
+	                   RETURNING id`,
 		transactionID, "payment_va", req.FromAccountNumber, req.DestinationVACode,
-		req.Amount, req.Description, referenceNumber, settlementDate, fee)
-
+		req.Amount, req.Description, referenceNumber, settlementDate, fee).Scan(&trxID)
 	if err != nil {
 		return nil, err
 	}
 
-	// Commit transaction
 	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
 
-	// Simulate processing delay
 	utils.SimulateDelay(800)
 
-	// Retrieve transaction
-	trxID, _ := result.LastInsertId()
 	transaction, _ := GetTransactionByID(int(trxID))
 
-	// Trigger notification
 	fromCIF, _ := GetCIFByAccountNumber(req.FromAccountNumber)
 	if fromCIF != "" {
 		SaveNotification(fromCIF, "payment", "Virtual Account Payment Berhasil",
@@ -207,7 +182,6 @@ func ProcessVAPayment(req VAPaymentRequest) (*models.Transaction, error) {
 
 // ProcessEWalletTopup processes e-wallet top-up transaction
 func ProcessEWalletTopup(req EWalletTopupRequest) (*models.Transaction, error) {
-	// Validate source account
 	fromAccount, err := GetAccountBalance(req.FromAccountNumber)
 	if err != nil {
 		return nil, fmt.Errorf("source account not found: %v", err)
@@ -217,64 +191,55 @@ func ProcessEWalletTopup(req EWalletTopupRequest) (*models.Transaction, error) {
 		return nil, fmt.Errorf("source account is not active")
 	}
 
-	// Get e-wallet fee (usually Rp 2,500 for OVO, DANA, GoPay)
 	serviceCode := fmt.Sprintf("TOPUP_%s", req.EWalletProvider)
 	fee, err := CalculateServiceFee(serviceCode, req.Amount)
 	if err != nil {
-		fee = 2500.0 // Default fallback
+		fee = 2500.0
 	}
 
 	totalAmount := req.Amount + fee
 
-	// Check balance
 	if fromAccount.AvailBalance < totalAmount {
 		return nil, fmt.Errorf("insufficient balance (amount: %.0f + fee: %.0f = %.0f)", req.Amount, fee, totalAmount)
 	}
 
-	// Start transaction
 	tx, err := database.DB.Begin()
 	if err != nil {
 		return nil, err
 	}
 	defer tx.Rollback()
 
-	// Debit from source account
-	_, err = tx.Exec(`UPDATE accounts SET balance = balance - ?, avail_balance = avail_balance - ?, 
-	                  updated_at = CURRENT_TIMESTAMP WHERE account_number = ?`,
+	_, err = tx.Exec(`UPDATE accounts SET balance = balance - $1, avail_balance = avail_balance - $2,
+	                  updated_at = NOW() WHERE account_number = $3`,
 		totalAmount, totalAmount, req.FromAccountNumber)
 	if err != nil {
 		return nil, err
 	}
 
-	// Create transaction record
 	transactionID := utils.GenerateTransactionID()
 	referenceNumber := utils.GenerateReferenceNumber()
 	settlementDate := utils.GetCurrentDate()
 
-	result, err := tx.Exec(`INSERT INTO transactions (transaction_id, transaction_type, 
-	                        from_account_number, to_account_number, amount, currency, 
-	                        description, reference_number, status, settlement_date, fee) 
-	                        VALUES (?, ?, ?, ?, ?, 'IDR', ?, ?, 'success', ?, ?)`,
+	var trxID int64
+	err = tx.QueryRow(`INSERT INTO transactions (transaction_id, transaction_type,
+	                   from_account_number, to_account_number, amount, currency,
+	                   description, reference_number, status, settlement_date, fee)
+	                   VALUES ($1, $2, $3, $4, $5, 'IDR', $6, $7, 'success', $8, $9)
+	                   RETURNING id`,
 		transactionID, "topup_ewallet", req.FromAccountNumber, req.PhoneNumber,
-		req.Amount, req.Description, referenceNumber, settlementDate, fee)
-
+		req.Amount, req.Description, referenceNumber, settlementDate, fee).Scan(&trxID)
 	if err != nil {
 		return nil, err
 	}
 
-	// Commit transaction
 	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
 
-	// Simulate processing delay
 	utils.SimulateDelay(1000)
 
-	// Retrieve transaction
-	trxID, _ := result.LastInsertId()
 	transaction, _ := GetTransactionByID(int(trxID))
 
-	// Trigger notification
 	fromCIF, _ := GetCIFByAccountNumber(req.FromAccountNumber)
 	if fromCIF != "" {
 		SaveNotification(fromCIF, "topup", "Top-up E-Wallet Berhasil",
@@ -289,7 +254,6 @@ func ProcessEWalletTopup(req EWalletTopupRequest) (*models.Transaction, error) {
 
 // ProcessEMoneyTopup processes e-money top-up transaction
 func ProcessEMoneyTopup(req EMoneyTopupRequest) (*models.Transaction, error) {
-	// Validate source account
 	fromAccount, err := GetAccountBalance(req.FromAccountNumber)
 	if err != nil {
 		return nil, fmt.Errorf("source account not found: %v", err)
@@ -299,64 +263,55 @@ func ProcessEMoneyTopup(req EMoneyTopupRequest) (*models.Transaction, error) {
 		return nil, fmt.Errorf("source account is not active")
 	}
 
-	// Get e-money fee (usually Rp 2,500 for LinkAja and Mandiri e-Money)
 	serviceCode := fmt.Sprintf("TOPUP_%s", req.EMoneyProvider)
 	fee, err := CalculateServiceFee(serviceCode, req.Amount)
 	if err != nil {
-		fee = 2500.0 // Default fallback
+		fee = 2500.0
 	}
 
 	totalAmount := req.Amount + fee
 
-	// Check balance
 	if fromAccount.AvailBalance < totalAmount {
 		return nil, fmt.Errorf("insufficient balance (amount: %.0f + fee: %.0f = %.0f)", req.Amount, fee, totalAmount)
 	}
 
-	// Start transaction
 	tx, err := database.DB.Begin()
 	if err != nil {
 		return nil, err
 	}
 	defer tx.Rollback()
 
-	// Debit from source account
-	_, err = tx.Exec(`UPDATE accounts SET balance = balance - ?, avail_balance = avail_balance - ?, 
-	                  updated_at = CURRENT_TIMESTAMP WHERE account_number = ?`,
+	_, err = tx.Exec(`UPDATE accounts SET balance = balance - $1, avail_balance = avail_balance - $2,
+	                  updated_at = NOW() WHERE account_number = $3`,
 		totalAmount, totalAmount, req.FromAccountNumber)
 	if err != nil {
 		return nil, err
 	}
 
-	// Create transaction record
 	transactionID := utils.GenerateTransactionID()
 	referenceNumber := utils.GenerateReferenceNumber()
 	settlementDate := utils.GetCurrentDate()
 
-	result, err := tx.Exec(`INSERT INTO transactions (transaction_id, transaction_type, 
-	                        from_account_number, to_account_number, amount, currency, 
-	                        description, reference_number, status, settlement_date, fee) 
-	                        VALUES (?, ?, ?, ?, ?, 'IDR', ?, ?, 'success', ?, ?)`,
+	var trxID int64
+	err = tx.QueryRow(`INSERT INTO transactions (transaction_id, transaction_type,
+	                   from_account_number, to_account_number, amount, currency,
+	                   description, reference_number, status, settlement_date, fee)
+	                   VALUES ($1, $2, $3, $4, $5, 'IDR', $6, $7, 'success', $8, $9)
+	                   RETURNING id`,
 		transactionID, "topup_emoney", req.FromAccountNumber, req.CardNumber,
-		req.Amount, req.Description, referenceNumber, settlementDate, fee)
-
+		req.Amount, req.Description, referenceNumber, settlementDate, fee).Scan(&trxID)
 	if err != nil {
 		return nil, err
 	}
 
-	// Commit transaction
 	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
 
-	// Simulate processing delay
 	utils.SimulateDelay(1000)
 
-	// Retrieve transaction
-	trxID, _ := result.LastInsertId()
 	transaction, _ := GetTransactionByID(int(trxID))
 
-	// Trigger notification
 	fromCIF, _ := GetCIFByAccountNumber(req.FromAccountNumber)
 	if fromCIF != "" {
 		SaveNotification(fromCIF, "topup", "Top-up E-Money Berhasil",

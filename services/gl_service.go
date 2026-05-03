@@ -8,7 +8,6 @@ import (
 	"time"
 )
 
-// JournalLineInput represents input for creating a journal line
 type JournalLineInput struct {
 	AccountCode  string  `json:"account_code"`
 	DebitAmount  float64 `json:"debit_amount"`
@@ -18,7 +17,6 @@ type JournalLineInput struct {
 
 // CreateJournalEntry creates a double-entry journal posting
 func CreateJournalEntry(entryDate, description, refType, refID, postedBy string, lines []JournalLineInput) (*models.JournalEntry, error) {
-	// Validate: total debit must equal total credit
 	var totalDebit, totalCredit float64
 	for _, line := range lines {
 		totalDebit += line.DebitAmount
@@ -33,30 +31,26 @@ func CreateJournalEntry(entryDate, description, refType, refID, postedBy string,
 		return nil, fmt.Errorf("journal must have at least 2 lines")
 	}
 
-	// Generate journal number
 	journalNumber := fmt.Sprintf("JRN-%s-%s", time.Now().UTC().Format("20060102"), fmt.Sprintf("%06d", time.Now().UnixNano()%1000000))
 
-	// Begin transaction
 	tx, err := database.DB.Begin()
 	if err != nil {
 		return nil, fmt.Errorf("failed to begin transaction: %v", err)
 	}
 	defer tx.Rollback()
 
-	// Insert journal entry
-	result, err := tx.Exec(`INSERT INTO journal_entries (journal_number, entry_date, description, reference_type, reference_id, posted_by, status) 
-	                         VALUES (?, ?, ?, ?, ?, ?, 'posted')`,
-		journalNumber, entryDate, description, refType, refID, postedBy)
+	var journalID int64
+	err = tx.QueryRow(`INSERT INTO journal_entries (journal_number, entry_date, description, reference_type, reference_id, posted_by, status)
+	                   VALUES ($1, $2, $3, $4, $5, $6, 'posted')
+	                   RETURNING id`,
+		journalNumber, entryDate, description, refType, refID, postedBy).Scan(&journalID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create journal entry: %v", err)
 	}
 
-	journalID, _ := result.LastInsertId()
-
-	// Insert journal lines
 	for _, line := range lines {
-		_, err := tx.Exec(`INSERT INTO journal_lines (journal_id, account_code, debit_amount, credit_amount, description) 
-		                    VALUES (?, ?, ?, ?, ?)`,
+		_, err := tx.Exec(`INSERT INTO journal_lines (journal_id, account_code, debit_amount, credit_amount, description)
+		                   VALUES ($1, $2, $3, $4, $5)`,
 			journalID, line.AccountCode, line.DebitAmount, line.CreditAmount, line.Description)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create journal line: %v", err)
@@ -90,34 +84,37 @@ func GetJournalEntries(dateFrom, dateTo, refType string, page, pageSize int) ([]
 		pageSize = 20
 	}
 
-	query := `SELECT id, journal_number, entry_date, description, reference_type, reference_id, posted_by, status, created_at 
-	          FROM journal_entries WHERE 1=1`
-	countQuery := `SELECT COUNT(*) FROM journal_entries WHERE 1=1`
+	// Build dynamic query with positional params
 	args := []interface{}{}
+	argN := 1
+	where := " WHERE 1=1"
 
 	if dateFrom != "" {
-		query += " AND entry_date >= ?"
-		countQuery += " AND entry_date >= ?"
+		where += fmt.Sprintf(" AND entry_date >= $%d", argN)
 		args = append(args, dateFrom)
+		argN++
 	}
 	if dateTo != "" {
-		query += " AND entry_date <= ?"
-		countQuery += " AND entry_date <= ?"
+		where += fmt.Sprintf(" AND entry_date <= $%d", argN)
 		args = append(args, dateTo)
+		argN++
 	}
 	if refType != "" {
-		query += " AND reference_type = ?"
-		countQuery += " AND reference_type = ?"
+		where += fmt.Sprintf(" AND reference_type = $%d", argN)
 		args = append(args, refType)
+		argN++
 	}
 
+	countQuery := `SELECT COUNT(*) FROM journal_entries` + where
 	var total int
 	database.DB.QueryRow(countQuery, args...).Scan(&total)
 
-	query += " ORDER BY created_at DESC LIMIT ? OFFSET ?"
+	dataQuery := `SELECT id, journal_number, entry_date, description, reference_type, reference_id, posted_by, status, created_at
+	              FROM journal_entries` + where +
+		fmt.Sprintf(" ORDER BY created_at DESC LIMIT $%d OFFSET $%d", argN, argN+1)
 	args = append(args, pageSize, (page-1)*pageSize)
 
-	rows, err := database.DB.Query(query, args...)
+	rows, err := database.DB.Query(dataQuery, args...)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -137,12 +134,12 @@ func GetJournalEntries(dateFrom, dateTo, refType string, page, pageSize int) ([]
 	return entries, total, nil
 }
 
-// GetJournalLines retrieves the lines for a journal entry
+// GetJournalLines retrieves lines for a journal entry
 func GetJournalLines(journalID int) ([]models.JournalLine, error) {
 	query := `SELECT jl.id, jl.journal_id, jl.account_code, coa.account_name, jl.debit_amount, jl.credit_amount, jl.description
 	          FROM journal_lines jl
 	          JOIN chart_of_accounts coa ON jl.account_code = coa.account_code
-	          WHERE jl.journal_id = ?`
+	          WHERE jl.journal_id = $1`
 
 	rows, err := database.DB.Query(query, journalID)
 	if err != nil {
@@ -163,12 +160,12 @@ func GetJournalLines(journalID int) ([]models.JournalLine, error) {
 	return lines, nil
 }
 
-// GetAccountBalance returns the balance for a GL account
+// GetGLAccountBalance returns the balance for a GL account
 func GetGLAccountBalance(accountCode string) (float64, error) {
 	query := `SELECT COALESCE(SUM(debit_amount), 0) - COALESCE(SUM(credit_amount), 0)
 	          FROM journal_lines jl
 	          JOIN journal_entries je ON jl.journal_id = je.id
-	          WHERE jl.account_code = ? AND je.status = 'posted'`
+	          WHERE jl.account_code = $1 AND je.status = 'posted'`
 
 	var balance float64
 	err := database.DB.QueryRow(query, accountCode).Scan(&balance)
@@ -176,9 +173,8 @@ func GetGLAccountBalance(accountCode string) (float64, error) {
 		return 0, err
 	}
 
-	// For liability/equity/revenue accounts, flip the sign
 	var normalBalance string
-	database.DB.QueryRow(`SELECT normal_balance FROM chart_of_accounts WHERE account_code = ?`, accountCode).Scan(&normalBalance)
+	database.DB.QueryRow(`SELECT normal_balance FROM chart_of_accounts WHERE account_code = $1`, accountCode).Scan(&normalBalance)
 	if normalBalance == "credit" {
 		balance = -balance
 	}
@@ -189,21 +185,23 @@ func GetGLAccountBalance(accountCode string) (float64, error) {
 // GetTrialBalance generates a trial balance report
 func GetTrialBalance(asOfDate string) ([]models.TrialBalance, error) {
 	query := `SELECT coa.account_code, coa.account_name, coa.account_type,
-	              COALESCE(SUM(jl.debit_amount), 0) as total_debit,
-	              COALESCE(SUM(jl.credit_amount), 0) as total_credit
+	              COALESCE(SUM(jl.debit_amount), 0) AS total_debit,
+	              COALESCE(SUM(jl.credit_amount), 0) AS total_credit
 	          FROM chart_of_accounts coa
 	          LEFT JOIN journal_lines jl ON coa.account_code = jl.account_code
 	          LEFT JOIN journal_entries je ON jl.journal_id = je.id AND je.status = 'posted'`
 
 	args := []interface{}{}
+	argN := 1
 	if asOfDate != "" {
-		query += ` AND je.entry_date <= ?`
+		query += fmt.Sprintf(` AND je.entry_date <= $%d`, argN)
 		args = append(args, asOfDate)
+		argN++
 	}
 
-	query += ` WHERE coa.level = 3 AND coa.is_active = 1
+	query += ` WHERE coa.level = 3 AND coa.is_active = TRUE
 	           GROUP BY coa.account_code, coa.account_name, coa.account_type
-	           HAVING total_debit > 0 OR total_credit > 0
+	           HAVING SUM(jl.debit_amount) > 0 OR SUM(jl.credit_amount) > 0
 	           ORDER BY coa.account_code`
 
 	rows, err := database.DB.Query(query, args...)
@@ -227,12 +225,12 @@ func GetTrialBalance(asOfDate string) ([]models.TrialBalance, error) {
 
 // GetChartOfAccounts returns the chart of accounts with optional type filter
 func GetChartOfAccounts(accountType string) ([]models.ChartOfAccount, error) {
-	query := `SELECT id, account_code, account_name, account_type, parent_code, level, normal_balance, is_active, created_at
-	          FROM chart_of_accounts WHERE is_active = 1`
 	args := []interface{}{}
+	query := `SELECT id, account_code, account_name, account_type, parent_code, level, normal_balance, is_active, created_at
+	          FROM chart_of_accounts WHERE is_active = TRUE`
 
 	if accountType != "" {
-		query += " AND account_type = ?"
+		query += " AND account_type = $1"
 		args = append(args, accountType)
 	}
 
@@ -260,13 +258,11 @@ func GetChartOfAccounts(accountType string) ([]models.ChartOfAccount, error) {
 
 // ReverseJournalEntry creates a reversal entry for an existing journal
 func ReverseJournalEntry(journalID int, reversedBy string) (*models.JournalEntry, error) {
-	// Get original lines
 	lines, err := GetJournalLines(journalID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get original journal lines: %v", err)
 	}
 
-	// Reverse: swap debit and credit
 	var reversedLines []JournalLineInput
 	for _, l := range lines {
 		reversedLines = append(reversedLines, JournalLineInput{
@@ -283,8 +279,7 @@ func ReverseJournalEntry(journalID int, reversedBy string) (*models.JournalEntry
 		return nil, err
 	}
 
-	// Mark original as reversed
-	database.DB.Exec(`UPDATE journal_entries SET status = 'reversed', reversed_by = ? WHERE id = ?`, entry.ID, journalID)
+	database.DB.Exec(`UPDATE journal_entries SET status = 'reversed', reversed_by = $1 WHERE id = $2`, entry.ID, journalID)
 
 	return entry, nil
 }
