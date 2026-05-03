@@ -94,10 +94,11 @@ func MarkNotificationAsRead(c *gin.Context) {
 
 // RegisterFCMToken registers device FCM token for push notifications
 func RegisterFCMToken(c *gin.Context) {
+	cif, _ := c.Get("cif")
+
 	var req struct {
-		CIF         string `json:"cif" binding:"required"`
 		DeviceToken string `json:"device_token" binding:"required"`
-		DeviceType  string `json:"device_type"` // android, ios, web
+		DeviceType  string `json:"device_type"`
 		DeviceName  string `json:"device_name"`
 	}
 
@@ -109,7 +110,7 @@ func RegisterFCMToken(c *gin.Context) {
 		return
 	}
 
-	if err := services.RegisterFCMToken(req.CIF, req.DeviceToken, req.DeviceType, req.DeviceName); err != nil {
+	if err := services.RegisterFCMToken(cif.(string), req.DeviceToken, req.DeviceType, req.DeviceName); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"status":  "error",
 			"message": "Failed to register FCM token",
@@ -167,5 +168,51 @@ func UpdateNotificationPreferences(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"status":  "success",
 		"message": "Notification preferences updated successfully",
+	})
+}
+
+func UnregisterFCMToken(c *gin.Context) {
+	cif, _ := c.Get("cif")
+
+	var req struct {
+		DeviceToken string `json:"device_token" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"status":  "error",
+			"message": "device_token is required",
+		})
+		return
+	}
+
+	if err := services.UnregisterFCMToken(cif.(string), req.DeviceToken); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"status":  "error",
+			"message": "Failed to unregister FCM token",
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"status":  "success",
+		"message": "Device token unregistered successfully",
+	})
+}
+
+func GetFCMDevices(c *gin.Context) {
+	cif, _ := c.Get("cif")
+
+	devices, err := services.GetFCMDevices(cif.(string))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"status":  "error",
+			"message": "Failed to fetch devices",
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"status": "success",
+		"data":   devices,
 	})
 }

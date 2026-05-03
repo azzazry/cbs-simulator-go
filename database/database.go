@@ -4,7 +4,6 @@ import (
 	"cbs-simulator/config"
 	"database/sql"
 	"fmt"
-	"log"
 	"os"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
@@ -12,45 +11,34 @@ import (
 
 var DB *sql.DB
 
-// InitDB initializes the PostgreSQL connection and runs migrations
 func InitDB() error {
 	var err error
 
-	// Open database connection via pgx stdlib driver
 	DB, err = sql.Open("pgx", config.AppConfig.DatabaseDSN)
 	if err != nil {
 		return fmt.Errorf("failed to open database: %v", err)
 	}
 
-	// Connection pool tuning
 	DB.SetMaxOpenConns(25)
 	DB.SetMaxIdleConns(10)
 
-	// Test connection
 	if err := DB.Ping(); err != nil {
 		return fmt.Errorf("failed to ping database: %v", err)
 	}
 
-	log.Println("PostgreSQL connection established")
-
-	// Run migrations
 	if err := runMigrations(); err != nil {
 		return fmt.Errorf("failed to run migrations: %v", err)
 	}
 
-	// Check if database is empty, then seed
 	if isEmpty() {
-		log.Println("Database is empty, running seeders...")
 		if err := runSeeders(); err != nil {
 			return fmt.Errorf("failed to run seeders: %v", err)
 		}
 	}
 
-	log.Println("Database initialized successfully")
 	return nil
 }
 
-// runMigrations executes all SQL migration files
 func runMigrations() error {
 	migrationFiles := []string{
 		"./database/migrations/001_init_schema.sql",
@@ -72,11 +60,9 @@ func runMigrations() error {
 		}
 	}
 
-	log.Println("Migrations completed successfully")
 	return nil
 }
 
-// runSeeders executes all SQL seeder files
 func runSeeders() error {
 	seederFiles := []string{
 		"./database/seeders/001_sample_data.sql",
@@ -89,8 +75,7 @@ func runSeeders() error {
 	for _, seederFile := range seederFiles {
 		sqlBytes, err := os.ReadFile(seederFile)
 		if err != nil {
-			log.Printf("Warning: seeder file not found: %s", seederFile)
-			continue
+			continue // skip kalau file tidak ada
 		}
 
 		if _, err := DB.Exec(string(sqlBytes)); err != nil {
@@ -98,11 +83,9 @@ func runSeeders() error {
 		}
 	}
 
-	log.Println("Seeders completed successfully")
 	return nil
 }
 
-// isEmpty checks if the database is empty (no customers yet)
 func isEmpty() bool {
 	var count int
 	err := DB.QueryRow("SELECT COUNT(*) FROM customers").Scan(&count)
@@ -112,10 +95,8 @@ func isEmpty() bool {
 	return count == 0
 }
 
-// CloseDB closes the database connection
 func CloseDB() {
 	if DB != nil {
 		DB.Close()
-		log.Println("Database connection closed")
 	}
 }

@@ -162,3 +162,38 @@ func GetNotificationPreferences(cif string) (*models.NotificationPreference, err
 
 	return &prefs, nil
 }
+
+func UnregisterFCMToken(cif, deviceToken string) error {
+	_, err := database.DB.Exec(`
+		UPDATE fcm_tokens SET is_active = false, updated_at = NOW()
+		WHERE cif = $1 AND device_token = $2
+	`, cif, deviceToken)
+	return err
+}
+
+func GetFCMDevices(cif string) ([]models.FCMToken, error) {
+	rows, err := database.DB.Query(`
+		SELECT id, cif, device_token, device_type, device_name, is_active, created_at, updated_at
+		FROM fcm_tokens
+		WHERE cif = $1
+		ORDER BY updated_at DESC
+	`, cif)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var devices []models.FCMToken
+	for rows.Next() {
+		var d models.FCMToken
+		var deviceType, deviceName sql.NullString
+		if err := rows.Scan(&d.ID, &d.CIF, &d.DeviceToken, &deviceType, &deviceName, &d.IsActive, &d.CreatedAt, &d.UpdatedAt); err != nil {
+			return nil, err
+		}
+		d.DeviceType = deviceType.String
+		d.DeviceName = deviceName.String
+		devices = append(devices, d)
+	}
+
+	return devices, nil
+}

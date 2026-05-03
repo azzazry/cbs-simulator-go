@@ -1,7 +1,6 @@
 package config
 
 import (
-	"log"
 	"os"
 	"strconv"
 
@@ -11,13 +10,13 @@ import (
 type Config struct {
 	// Server
 	ServerPort  string
-	DatabaseDSN string // PostgreSQL DSN
+	DatabaseDSN string
 	Environment string
 
 	// JWT
 	JWTSecret        string
-	JWTAccessExpiry  int // minutes
-	JWTRefreshExpiry int // hours
+	JWTAccessExpiry  int
+	JWTRefreshExpiry int
 
 	// Security
 	RateLimitPerMinute     int
@@ -29,43 +28,34 @@ type Config struct {
 	PINMaxLength int
 
 	// OTP
-	OTPExpiry int // minutes
+	OTPExpiry int
 	OTPLength int
 }
 
 var AppConfig *Config
 
 func LoadConfig() {
-	// Load .env file if exists
 	godotenv.Load()
 
 	AppConfig = &Config{
-		// Server
 		ServerPort:  getEnv("SERVER_PORT", "8080"),
 		DatabaseDSN: getEnv("DATABASE_DSN", "postgres://postgres:postgres@localhost:5432/cbs_simulator?sslmode=disable"),
 		Environment: getEnv("ENVIRONMENT", "development"),
 
-		// JWT
 		JWTSecret:        getEnv("JWT_SECRET", "cbs-simulator-secret-key-change-in-production"),
 		JWTAccessExpiry:  getEnvInt("JWT_ACCESS_EXPIRY_MINUTES", 15),
-		JWTRefreshExpiry: getEnvInt("JWT_REFRESH_EXPIRY_HOURS", 168), // 7 days
+		JWTRefreshExpiry: getEnvInt("JWT_REFRESH_EXPIRY_HOURS", 168),
 
-		// Security
 		RateLimitPerMinute:     getEnvInt("RATE_LIMIT_PER_MINUTE", 60),
 		MaxLoginAttempts:       getEnvInt("MAX_LOGIN_ATTEMPTS", 3),
 		LockoutDurationMinutes: getEnvInt("LOCKOUT_DURATION_MINUTES", 30),
 
-		// PIN Policy
 		PINMinLength: getEnvInt("PIN_MIN_LENGTH", 6),
 		PINMaxLength: getEnvInt("PIN_MAX_LENGTH", 6),
 
-		// OTP
 		OTPExpiry: getEnvInt("OTP_EXPIRY_MINUTES", 5),
 		OTPLength: getEnvInt("OTP_LENGTH", 6),
 	}
-
-	log.Printf("Configuration loaded: Port=%s, DB=<dsn>, Env=%s",
-		AppConfig.ServerPort, AppConfig.Environment)
 }
 
 func getEnv(key, defaultValue string) string {

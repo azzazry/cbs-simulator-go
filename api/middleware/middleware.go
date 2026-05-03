@@ -30,28 +30,6 @@ func CORSMiddleware() gin.HandlerFunc {
 	}
 }
 
-// LoggerMiddleware logs all requests
-func LoggerMiddleware() gin.HandlerFunc {
-	return func(c *gin.Context) {
-		start := time.Now()
-		c.Next()
-		latency := time.Since(start)
-
-		statusCode := c.Writer.Status()
-		clientIP := c.ClientIP()
-		method := c.Request.Method
-		path := c.Request.URL.Path
-
-		gin.DefaultWriter.Write([]byte(
-			time.Now().Format("2006/01/02 - 15:04:05") +
-				" | " + http.StatusText(statusCode) +
-				" | " + latency.String() +
-				" | " + clientIP +
-				" | " + method + " " + path + "\n",
-		))
-	}
-}
-
 // AuthMiddleware validates JWT tokens on protected routes
 func AuthMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {

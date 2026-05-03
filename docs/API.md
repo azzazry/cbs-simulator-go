@@ -175,8 +175,6 @@ Get customer information.
 
 **Endpoint:** `GET /customers/:cif`
 
-**Headers:** `Authorization: Bearer <access_token>`
-
 **Example:** `GET /customers/CIF001`
 
 **Success Response:**
@@ -341,133 +339,21 @@ Transfer to other bank (with dynamic fee based on destination bank configuration
 - **Default:** Rp 5,000 per transfer (domestic)
 - **International:** Rp 10,000 per transfer
 - **Fee Type:** Flat amount (can be changed to percentage)
-- **Application:** Real-time calculation before deduction
-- **Management:** Use `/api/v1/admin/fees/transfer/calculate` to check fee for any amount
-
-**Example with Fee Calculation:**
-
-Request:
-```bash
-POST /api/v1/admin/fees/transfer/calculate
-Content-Type: application/json
-
-{
-  "destination_bank_code": "BCA",
-  "amount": 500000
-}
-```
-
-Response:
-```json
-{
-  "status": "success",
-  "data": {
-    "destination_bank_code": "BCA",
-    "destination_bank_name": "Bank BCA",
-    "transfer_amount": 500000,
-    "fee": 5000,
-    "total_amount": 505000
-  }
-}
-```
-
-**Transfer Response (with fee deducted):**
-```json
-{
-  "status": "success",
-  "data": {
-    "id": 1,
-    "transaction_id": "TRX20260307XYZ",
-    "transaction_type": "transfer_inter",
-    "from_account_number": "1001234567",
-    "to_account_number": "1234567890",
-    "amount": 500000.00,
-    "currency": "IDR",
-    "description": "Transfer ke Bank Lain",
-    "reference_number": "REF20260307001",
-    "status": "success",
-    "transaction_date": "2026-03-07T10:30:00Z",
-    "settlement_date": "2026-03-07",
-    "fee": 5000.00,
-    "created_at": "2026-03-07T10:30:00Z"
-  }
-}
-```
 
 **Supported Banks:**
 - MANDIRI, BCA, BRI, CIMB, DANAMON, OCBC, MEGA, PERMATA
 - UOB, COMMONWEALTH, PANIN, MAYBANK, BTN, SUMITOMO, DBS
 - CITIBANK, HSBC, MIZUHO, JPMORGAN
 
-**Possible Errors:**
+**Error Responses:**
 - 400: Insufficient balance (including fee)
 - 404: Account not found
 - 400: Account not active
 - 400: Invalid bank code
 
-### Get Transaction Details
-Get specific transaction information.
-
-**Endpoint:** `GET /transfers/:transaction_id`
-
-**Example:** `GET /transfers/TRX20260301001`
-
 ---
 
 ## Bill Payment (PPOB)
-
-### Get Biller List
-Get list of available billers.
-
-**Endpoint:** `GET /bills/billers`
-
-**Success Response:**
-```json
-{
-  "status": "success",
-  "data": [
-    {
-      "code": "PLN",
-      "name": "PT PLN (Persero)",
-      "category": "Electricity"
-    },
-    {
-      "code": "PDAM",
-      "name": "PDAM",
-      "category": "Water"
-    }
-  ]
-}
-```
-
-### Bill Inquiry
-Check bill amount before payment.
-
-**Endpoint:** `GET /bills/inquiry?biller_code=PLN&customer_number=123456789012`
-
-**Query Parameters:**
-- `biller_code`: Biller code (PLN, PDAM, TELKOM, etc)
-- `customer_number`: Customer ID at biller
-
-**Success Response:**
-```json
-{
-  "status": "success",
-  "data": {
-    "id": 1,
-    "biller_code": "PLN",
-    "biller_name": "PT PLN (Persero)",
-    "customer_number": "123456789012",
-    "bill_number": "BILL202603001",
-    "bill_amount": 450000.00,
-    "admin_fee": 2500.00,
-    "total_amount": 452500.00,
-    "bill_period": "2026-02",
-    "due_date": "2026-03-20",
-    "status": "unpaid"
-  }
-}
-```
 
 ### Pay Bill
 Process bill payment.
@@ -496,14 +382,18 @@ Process bill payment.
 }
 ```
 
+### Get Bill History
+Get bill payment history.
+
+**Endpoint:** `GET /bills/history`
+
 ---
 
 ## Cards
 
 ### Get All Cards by CIF
-Get all cards for a customer.
 
-**Endpoint:** `GET /customers/:cif/cards`
+**Endpoint:** `GET /cards/:cif`
 
 **Success Response:**
 ```json
@@ -526,13 +416,7 @@ Get all cards for a customer.
 }
 ```
 
-### Get Card Details
-Get specific card information.
-
-**Endpoint:** `GET /cards/:card_number`
-
 ### Block Card
-Block a card for security.
 
 **Endpoint:** `POST /cards/block`
 
@@ -544,7 +428,6 @@ Block a card for security.
 ```
 
 ### Unblock Card
-Unblock a previously blocked card.
 
 **Endpoint:** `POST /cards/unblock`
 
@@ -560,9 +443,8 @@ Unblock a previously blocked card.
 ## Loans
 
 ### Get All Loans by CIF
-Get all loans for a customer.
 
-**Endpoint:** `GET /customers/:cif/loans`
+**Endpoint:** `GET /loans/:cif`
 
 **Success Response:**
 ```json
@@ -591,18 +473,16 @@ Get all loans for a customer.
 ```
 
 ### Get Loan Details
-Get specific loan information.
 
-**Endpoint:** `GET /loans/:loan_number`
+**Endpoint:** `GET /loans/detail/:loan_number`
 
 ---
 
 ## Deposits
 
 ### Get All Deposits by CIF
-Get all time deposits for a customer.
 
-**Endpoint:** `GET /customers/:cif/deposits`
+**Endpoint:** `GET /deposits/:cif`
 
 **Success Response:**
 ```json
@@ -628,40 +508,16 @@ Get all time deposits for a customer.
 ```
 
 ### Get Deposit Details
-Get specific deposit information.
 
-**Endpoint:** `GET /deposits/:deposit_number`
-
----
-
-## Health Check
-
-### Server Health
-Check if server is running.
-
-**Endpoint:** `GET /health`
-
-**Success Response:**
-```json
-{
-  "status": "healthy",
-  "service": "CBS Simulator",
-  "version": "1.0.0"
-}
-```
+**Endpoint:** `GET /deposits/detail/:deposit_number`
 
 ---
 
 ## Notifications
 
 ### Get Notification History
-Get notification history with pagination.
 
 **Endpoint:** `GET /notifications/:cif?limit=20&offset=0`
-
-**Query Parameters:**
-- `limit` (optional): Number of records (default: 20)
-- `offset` (optional): Pagination offset (default: 0)
 
 **Success Response:**
 ```json
@@ -682,23 +538,7 @@ Get notification history with pagination.
 }
 ```
 
-### Get Unread Notification Count
-Get count of unread notifications.
-
-**Endpoint:** `GET /notifications/:cif/count`
-
-**Success Response:**
-```json
-{
-  "status": "success",
-  "data": {
-    "unread_count": 5
-  }
-}
-```
-
 ### Mark Notification as Read
-Mark a notification as read.
 
 **Endpoint:** `POST /notifications/read`
 
@@ -709,26 +549,24 @@ Mark a notification as read.
 }
 ```
 
-**Success Response:**
-```json
-{
-  "status": "success",
-  "message": "Notification marked as read"
-}
-```
+---
 
-### Register FCM Token
-Register device FCM token for push notifications.
+## FCM & Device Management
 
-**Endpoint:** `POST /notifications/fcm-token`
+> **🔒 Semua endpoint membutuhkan:** `Authorization: Bearer <access_token>`
+> CIF diambil otomatis dari JWT token, tidak perlu dikirim di request body.
+
+### Register Device Token
+Daftarkan FCM token device untuk menerima push notification.
+
+**Endpoint:** `POST /fcm/register`
 
 **Request Body:**
 ```json
 {
-  "cif": "CIF001",
-  "device_token": "exxxxxxxxxxxxxxxxxxxxxxxxx",
+  "device_token": "fcm_token_dari_firebase_sdk",
   "device_type": "android",
-  "device_name": "Samsung Galaxy A12"
+  "device_name": "Samsung Galaxy S24"
 }
 ```
 
@@ -736,45 +574,21 @@ Register device FCM token for push notifications.
 ```json
 {
   "status": "success",
-  "message": "FCM token registered successfully"
+  "message": "Device token registered successfully"
 }
 ```
 
-### Get Notification Preferences
-Get user notification settings.
+> **Note:** Jika `device_token` sudah ada, data akan diupdate (upsert).
 
-**Endpoint:** `GET /notifications/:cif/preferences`
+### Unregister Device Token
+Nonaktifkan device token (misal saat logout dari device).
 
-**Success Response:**
-```json
-{
-  "status": "success",
-  "data": {
-    "id": 1,
-    "cif": "CIF001",
-    "transfer_notification": 1,
-    "payment_notification": 1,
-    "deposit_notification": 1,
-    "loan_notification": 1,
-    "promotion_notification": 1,
-    "updated_at": "2026-03-07T10:00:00Z"
-  }
-}
-```
-
-### Update Notification Preferences
-Update user notification settings.
-
-**Endpoint:** `PUT /notifications/:cif/preferences`
+**Endpoint:** `DELETE /fcm/unregister`
 
 **Request Body:**
 ```json
 {
-  "transfer_notification": 1,
-  "payment_notification": 1,
-  "deposit_notification": 0,
-  "loan_notification": 1,
-  "promotion_notification": 0
+  "device_token": "fcm_token_yang_mau_dinonaktifkan"
 }
 ```
 
@@ -782,82 +596,79 @@ Update user notification settings.
 ```json
 {
   "status": "success",
-  "message": "Notification preferences updated successfully"
+  "message": "Device token unregistered successfully"
 }
+```
+
+### Get Registered Devices
+Lihat semua device yang terdaftar untuk akun ini.
+
+**Endpoint:** `GET /fcm/devices`
+
+**Success Response:**
+```json
+{
+  "status": "success",
+  "data": [
+    {
+      "id": 1,
+      "cif": "CIF001",
+      "device_token": "fcm_token_dari_firebase_sdk",
+      "device_type": "android",
+      "device_name": "Samsung Galaxy S24",
+      "is_active": true,
+      "created_at": "2026-05-04T01:00:00Z",
+      "updated_at": "2026-05-04T01:00:00Z"
+    }
+  ]
+}
+```
+
+**Testing tanpa mobile app (Postman):**
+```bash
+# Register device token dummy
+curl -X POST http://localhost:8080/api/v1/fcm/register \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "device_token": "test-device-token-001",
+    "device_type": "android",
+    "device_name": "Test Device"
+  }'
 ```
 
 ---
 
-## Error Codes
+## Payments
 
-| HTTP Status | Description |
-|-------------|-------------|
-| 200 | Success |
-| 201 | Created - Resource created successfully |
-| 400 | Bad Request - Invalid input or business logic error |
-| 401 | Unauthorized - Missing/invalid/expired JWT token |
-| 403 | Forbidden - Insufficient role permissions (RBAC) |
-| 404 | Not Found - Resource not found |
-| 429 | Too Many Requests - Rate limit exceeded (60 req/min) |
-| 500 | Internal Server Error |
+### QRIS Payment
+
+**Endpoint:** `POST /payments/qris`
+
+### Virtual Account Payment
+
+**Endpoint:** `POST /payments/va`
+
+### E-Wallet Top Up
+
+**Endpoint:** `POST /payments/ewallet/topup`
+
+### E-Money Top Up
+
+**Endpoint:** `POST /payments/emoney/topup`
 
 ---
 
-## Testing with cURL
+## Health Check
 
-### Complete Flow Example
+**Endpoint:** `GET /health`
 
-```bash
-# 1. Health Check
-curl http://localhost:8080/health
-
-# 2. Login (simpan access_token dari response)
-curl -X POST http://localhost:8080/api/v1/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{"cif": "CIF001", "pin": "123456"}'
-
-# Set token (ganti dengan access_token dari response login)
-export TOKEN="eyJhbGci..."
-
-# 3. Get Profile
-curl http://localhost:8080/api/v1/auth/profile \
-  -H "Authorization: Bearer $TOKEN"
-
-# 4. Get Accounts
-curl http://localhost:8080/api/v1/customers/CIF001/accounts \
-  -H "Authorization: Bearer $TOKEN"
-
-# 5. Check Balance
-curl http://localhost:8080/api/v1/accounts/1001234567 \
-  -H "Authorization: Bearer $TOKEN"
-
-# 6. Transfer Money
-curl -X POST http://localhost:8080/api/v1/transfers/intra \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "from_account_number": "1001234567",
-    "to_account_number": "1001234568",
-    "amount": 100000,
-    "description": "Test transfer"
-  }'
-
-# 7. Check Statement
-curl "http://localhost:8080/api/v1/accounts/1001234567/statement?limit=5" \
-  -H "Authorization: Bearer $TOKEN"
-
-# 8. Pay Bill
-curl -X POST http://localhost:8080/api/v1/bills/pay \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "account_number": "1001234567",
-    "bill_number": "BILL202603001"
-  }'
-
-# 9. Logout
-curl -X POST http://localhost:8080/api/v1/auth/logout \
-  -H "Authorization: Bearer $TOKEN"
+**Success Response:**
+```json
+{
+  "status": "ok",
+  "service": "CBS Simulator"
+}
 ```
 
 ---
@@ -865,246 +676,60 @@ curl -X POST http://localhost:8080/api/v1/auth/logout \
 ## Admin Management APIs
 
 > **🔒 Admin endpoints membutuhkan role `admin` atau `supervisor`.**
-> Lihat [API_SECURITY.md](API_SECURITY.md) untuk endpoint keamanan admin (audit logs, roles, transaction limits).
 
-### Get All Supported Banks
-Get list of all supported banks for transfers.
+### Audit Logs
 
-**Endpoint:** `GET /admin/banks`
+**Endpoint:** `GET /admin/audit-logs`
 
-**Headers:** `Authorization: Bearer <admin_token>`
+### Transaction Limits
 
-**Response:**
+**Endpoint:** `GET /admin/transaction-limits`
+
+**Endpoint:** `PUT /admin/transaction-limits`
+
+### Role Management
+
+**Endpoint:** `GET /admin/roles`
+
+**Endpoint:** `POST /admin/roles/assign`
+
+### Unlock Account
+
+**Endpoint:** `POST /admin/unlock-account`
+
+### EOD Processing
+
+#### Jalankan EOD
+**Endpoint:** `POST /admin/eod/run`
+
+**Request Body:**
 ```json
 {
-  "status": "success",
-  "data": [
-    {
-      "id": 1,
-      "bank_code": "MANDIRI",
-      "bank_name": "Bank Mandiri",
-      "swift_code": "BMRIIDJA",
-      "is_active": 1,
-      "created_at": "2026-03-07T00:00:00Z",
-      "updated_at": "2026-03-07T00:00:00Z"
-    },
-    {
-      "id": 2,
-      "bank_code": "BCA",
-      "bank_name": "Bank BCA",
-      "swift_code": "BCAIDJA",
-      "is_active": 1,
-      "created_at": "2026-03-07T00:00:00Z",
-      "updated_at": "2026-03-07T00:00:00Z"
-    }
-  ]
+  "process_date": "2026-03-07"
 }
 ```
 
-### Transfer Fee Management
-
-#### Get All Transfer Fees
-**Endpoint:** `GET /admin/fees/transfer`
-
-Returns all configured transfer fees between bank pairs with current fee amounts.
-
-#### Update Transfer Fee
-Change fee for transfers between specific banks.
-
-**Endpoint:** `PUT /admin/fees/transfer`
-
-**Request:**
-```json
-{
-  "from_bank_code": "MANDIRI",
-  "to_bank_code": "BCA",
-  "fee_amount": 7500,
-  "fee_type": "flat"
-}
-```
-
-**Response:**
-```json
-{
-  "status": "success",
-  "message": "Transfer fee updated successfully",
-  "data": {
-    "from_bank_code": "MANDIRI",
-    "to_bank_code": "BCA",
-    "fee_amount": 7500,
-    "fee_type": "flat"
-  }
-}
-```
-
-#### Calculate Transfer Fee
-Calculate the fee for a specific transfer amount between two banks.
-
-**Endpoint:** `POST /admin/fees/transfer/calculate`
-
-**Request:**
-```json
-{
-  "from_bank_code": "MANDIRI",
-  "to_bank_code": "BCA",
-  "amount": 1000000
-}
-```
-
-**Response:**
+**Success Response:**
 ```json
 {
   "status": "success",
   "data": {
-    "from_bank_code": "MANDIRI",
-    "to_bank_code": "BCA",
-    "transfer_amount": 1000000,
-    "fee": 5000,
-    "total_amount": 1005000
+    "process_date": "2026-03-07",
+    "overall_status": "completed",
+    "processes": [
+      {"process_type": "interest_accrual", "status": "completed", "records_processed": 5},
+      {"process_type": "si_execution", "status": "completed", "records_processed": 2},
+      {"process_type": "dormant_check", "status": "completed", "records_processed": 0}
+    ]
   }
 }
 ```
 
-### Service Fee Management
+#### Status EOD
+**Endpoint:** `GET /admin/eod/status/:date`
 
-#### Get All Service Fees
-Get fees for all services (e-wallet, e-money, VA, QRIS, etc).
-
-**Endpoint:** `GET /admin/fees/services?type=topup_ewallet`
-
-Optional query parameter `type` to filter by service type:
-- `topup_ewallet` - E-wallet top-ups (OVO, DANA, GoPay)
-- `topup_emoney` - E-money top-ups (LinkAja, Mandiri e-Money)
-- `payment_va` - Virtual Account payments
-- `qris_payment` - QRIS payments
-
-#### Update Service Fee
-Change fee configuration for a service.
-
-**Endpoint:** `PUT /admin/fees/services`
-
-**Request (Flat Fee):**
-```json
-{
-  "service_code": "TOPUP_OVO",
-  "fee_amount": 3000,
-  "fee_percentage": 0,
-  "fee_type": "flat"
-}
-```
-
-**Request (Percentage Fee):**
-```json
-{
-  "service_code": "QRIS_PAYMENT",
-  "fee_amount": 0,
-  "fee_percentage": 1.5,
-  "fee_type": "percentage"
-}
-```
-
-**Response:**
-```json
-{
-  "status": "success",
-  "message": "Service fee updated successfully",
-  "data": {
-    "service_code": "TOPUP_OVO",
-    "fee_amount": 3000,
-    "fee_percentage": 0,
-    "fee_type": "flat"
-  }
-}
-```
-
-#### Calculate Service Fee
-Calculate fee for a service transaction.
-
-**Endpoint:** `POST /admin/fees/services/calculate`
-
-**Request:**
-```json
-{
-  "service_code": "TOPUP_OVO",
-  "amount": 100000
-}
-```
-
-**Response:**
-```json
-{
-  "status": "success",
-  "data": {
-    "service_code": "TOPUP_OVO",
-    "service_amount": 100000,
-    "fee": 2500,
-    "total_amount": 102500
-  }
-}
-```
-
-#### Get Fee Statistics
-View fee configuration statistics.
-
-**Endpoint:** `GET /admin/fees/statistics?type=transfer`
-
-Query parameters:
-- `type` - `transfer` or `service` (default: transfer)
-- `service_type` - Optional filter for service fees by type
-
-**Response:**
-```json
-{
-  "status": "success",
-  "data": {
-    "total_transfer_routes": 21,
-    "transfers": [...]
-  }
-}
-```
-
----
-
-## Service Codes Reference
-
-### E-Wallet Services
-| Code | Name | Fee |
-|------|------|-----|
-| TOPUP_OVO | OVO Top-Up | Rp 2,500 |
-| TOPUP_DANA | DANA Top-Up | Rp 2,500 |
-| TOPUP_GOPAY | GoPay Top-Up | Rp 2,500 |
-
-### E-Money Services
-| Code | Name | Fee |
-|------|------|-----|
-| TOPUP_LINKAJA | LinkAja Top-Up | Rp 2,500 |
-| TOPUP_MANDIRIEMONEY | Mandiri e-Money Top-Up | Rp 2,500 |
-
-### Virtual Account Services
-| Code | Name | Fee |
-|------|------|-----|
-| PAYMENT_VA_MANDIRI | Mandiri VA Payment | Free |
-| PAYMENT_VA_BCA | BCA VA Payment | Free |
-| PAYMENT_VA_BRI | BRI VA Payment | Free |
-
-### Digital Payment Services
-| Code | Name | Fee |
-|------|------|-----|
-| QRIS_PAYMENT | QRIS Payment | 1% |
-
----
-
-## Postman Collection
-
-Import this JSON to Postman for quick testing:
-
-[Link to Postman collection would go here]
-
----
-
-## Related Documentation
-
-- [API_SECURITY.md](API_SECURITY.md) — Security endpoints (JWT, OTP, e-KYC, RBAC, audit)
+#### Riwayat EOD
+**Endpoint:** `GET /admin/eod/history`
 
 ---
 
@@ -1112,37 +737,19 @@ Import this JSON to Postman for quick testing:
 
 ### General Ledger
 
-#### Daftar Chart of Accounts
-**Endpoint:** `GET /gl/chart-of-accounts?type=asset`
-
-```bash
-curl http://localhost:8080/api/v1/gl/chart-of-accounts -H "Authorization: Bearer $TOKEN"
-```
-
-**Response:**
-```json
-{
-  "status": "success",
-  "data": [
-    {"account_code": "111", "account_name": "Kas", "account_type": "asset", "normal_balance": "debit"}
-  ]
-}
-```
+#### Chart of Accounts
+**Endpoint:** `GET /gl/chart-of-accounts`
 
 #### Journal Entries
-**Endpoint:** `GET /gl/journal-entries?date_from=2026-01-01&date_to=2026-12-31&page=1`
+**Endpoint:** `GET /gl/journal-entries`
 
 #### Detail Jurnal
 **Endpoint:** `GET /gl/journal-entries/:id`
 
-#### Trial Balance (Neraca Saldo)
-**Endpoint:** `GET /gl/trial-balance?date=2026-03-07`
+#### Trial Balance
+**Endpoint:** `GET /gl/trial-balance`
 
-```bash
-curl http://localhost:8080/api/v1/gl/trial-balance -H "Authorization: Bearer $TOKEN"
-```
-
-**Response:**
+**Success Response:**
 ```json
 {
   "status": "success",
@@ -1167,20 +774,18 @@ curl http://localhost:8080/api/v1/gl/trial-balance -H "Authorization: Bearer $TO
 #### Single Customer View
 **Endpoint:** `GET /customers/:cif/overview`
 
-```bash
-curl http://localhost:8080/api/v1/customers/CIF001/overview -H "Authorization: Bearer $TOKEN"
-```
-
-**Response:** Data lengkap nasabah termasuk accounts, loans, deposits, cards, roles, dan data tambahan.
-
 #### Update Data Tambahan Nasabah
 **Endpoint:** `PUT /customers/:cif/extended`
 
-```bash
-curl -X PUT http://localhost:8080/api/v1/customers/CIF001/extended \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"mother_maiden_name":"Sari Dewi","nationality":"WNI","occupation":"Engineer","monthly_income":25000000,"npwp":"12.345.678.9-012.000"}'
+**Request Body:**
+```json
+{
+  "mother_maiden_name": "Sari Dewi",
+  "nationality": "WNI",
+  "occupation": "Engineer",
+  "monthly_income": 25000000,
+  "npwp": "12.345.678.9-012.000"
+}
 ```
 
 #### Cari Nasabah
@@ -1191,30 +796,21 @@ curl -X PUT http://localhost:8080/api/v1/customers/CIF001/extended \
 ### Bunga & Simulasi
 
 #### Daftar Suku Bunga
-**Endpoint:** `GET /interest/rates?product_type=savings`
-
-**Response:**
-```json
-{
-  "status": "success",
-  "data": [
-    {"product_type": "savings", "product_name": "Tabungan Reguler", "base_rate": 1.00, "min_balance": 0, "max_balance": 100000000},
-    {"product_type": "savings", "product_name": "Tabungan Reguler", "base_rate": 2.00, "min_balance": 100000000}
-  ]
-}
-```
+**Endpoint:** `GET /interest/rates`
 
 #### Simulasi Bunga
 **Endpoint:** `POST /interest/calculate`
 
-```bash
-curl -X POST http://localhost:8080/api/v1/interest/calculate \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"product_type":"deposit","principal":100000000,"tenor_months":12}'
+**Request Body:**
+```json
+{
+  "product_type": "deposit",
+  "principal": 100000000,
+  "tenor_months": 12
+}
 ```
 
-**Response:**
+**Success Response:**
 ```json
 {
   "status": "success",
@@ -1237,24 +833,31 @@ curl -X POST http://localhost:8080/api/v1/interest/calculate \
 #### Buat SI Baru
 **Endpoint:** `POST /standing-instructions`
 
-```bash
-curl -X POST http://localhost:8080/api/v1/standing-instructions \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"cif":"CIF001","from_account":"1001234567","instruction_type":"transfer","to_account":"1001234568","amount":500000,"frequency":"monthly","execution_day":1,"start_date":"2026-04-01"}'
+**Request Body:**
+```json
+{
+  "cif": "CIF001",
+  "from_account": "1001234567",
+  "instruction_type": "transfer",
+  "to_account": "1001234568",
+  "amount": 500000,
+  "frequency": "monthly",
+  "execution_day": 1,
+  "start_date": "2026-04-01"
+}
 ```
 
 #### Daftar SI Nasabah
-**Endpoint:** `GET /standing-instructions/:cif`
+**Endpoint:** `GET /standing-instructions/by-cif/:cif`
 
 #### Pause SI
-**Endpoint:** `PUT /standing-instructions/:si_number/pause`
+**Endpoint:** `PUT /standing-instructions/:id/pause`
 
 #### Batalkan SI
-**Endpoint:** `DELETE /standing-instructions/:si_number`
+**Endpoint:** `DELETE /standing-instructions/:id`
 
 #### Riwayat Eksekusi SI
-**Endpoint:** `GET /standing-instructions/:si_number/history`
+**Endpoint:** `GET /standing-instructions/:id/history`
 
 ---
 
@@ -1263,15 +866,20 @@ curl -X POST http://localhost:8080/api/v1/standing-instructions \
 #### Buka Rekening
 **Endpoint:** `POST /accounts/open`
 
-```bash
-curl -X POST http://localhost:8080/api/v1/accounts/open \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"cif":"CIF001","account_type":"savings","currency":"IDR","initial_deposit":1000000,"branch":"JKT001"}'
+**Request Body:**
+```json
+{
+  "cif": "CIF001",
+  "account_type": "savings",
+  "currency": "IDR",
+  "initial_deposit": 1000000,
+  "branch": "JKT001"
+}
 ```
 
 #### Tutup Rekening
 **Endpoint:** `POST /accounts/:account_number/close`
+
 > Rekening harus bersaldo 0 untuk bisa ditutup.
 
 #### Daftar Rekening Dormant
@@ -1282,40 +890,60 @@ curl -X POST http://localhost:8080/api/v1/accounts/open \
 
 ---
 
-### EOD Processing (Admin Only)
+## Error Codes
 
-#### Jalankan EOD
-**Endpoint:** `POST /admin/eod/run`
-
-```bash
-curl -X POST http://localhost:8080/api/v1/admin/eod/run \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"process_date":"2026-03-07"}'
-```
-
-**Response:**
-```json
-{
-  "status": "success",
-  "data": {
-    "process_date": "2026-03-07",
-    "overall_status": "completed",
-    "processes": [
-      {"process_type": "interest_accrual", "status": "completed", "records_processed": 5},
-      {"process_type": "si_execution", "status": "completed", "records_processed": 2},
-      {"process_type": "dormant_check", "status": "completed", "records_processed": 0}
-    ]
-  }
-}
-```
-
-#### Status EOD
-**Endpoint:** `GET /admin/eod/status/:date`
-
-#### Riwayat EOD
-**Endpoint:** `GET /admin/eod/history?date_from=2026-01-01&date_to=2026-12-31`
+| HTTP Status | Description |
+|-------------|-------------|
+| 200 | Success |
+| 201 | Created |
+| 400 | Bad Request - Invalid input atau business logic error |
+| 401 | Unauthorized - Missing/invalid/expired JWT token |
+| 403 | Forbidden - Insufficient role permissions |
+| 404 | Not Found |
+| 429 | Too Many Requests - Rate limit exceeded (60 req/min) |
+| 500 | Internal Server Error |
 
 ---
 
-**Last Updated:** Maret 2026 (Phase 2 Core Banking Update)
+## Testing dengan cURL
+
+```bash
+# 1. Login
+curl -X POST http://localhost:8080/api/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"cif": "CIF001", "pin": "123456"}'
+
+export TOKEN="eyJhbGci..."
+
+# 2. Register device FCM
+curl -X POST http://localhost:8080/api/v1/fcm/register \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"device_token": "test-device-001", "device_type": "android", "device_name": "Test Device"}'
+
+# 3. Lihat devices
+curl http://localhost:8080/api/v1/fcm/devices \
+  -H "Authorization: Bearer $TOKEN"
+
+# 4. Transfer (push notification akan terkirim ke device terdaftar)
+curl -X POST http://localhost:8080/api/v1/transfers/intra \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"from_account_number": "1001234567", "to_account_number": "1001234568", "amount": 100000, "description": "Test"}'
+
+# 5. Unregister device
+curl -X DELETE http://localhost:8080/api/v1/fcm/unregister \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"device_token": "test-device-001"}'
+```
+
+---
+
+## Related Documentation
+
+- [API_SECURITY.md](API_SECURITY.md) — Security endpoints (JWT, OTP, e-KYC, RBAC, audit)
+
+---
+
+**Last Updated:** Mei 2026 (FCM Device Management Update)
